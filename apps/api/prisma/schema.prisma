@@ -1,0 +1,381 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── RBAC ──────────────────────────────────────────────────────────────────
+
+model Role {
+  id             String           @id @default(cuid())
+  key            String           @unique // customer | restaurant_owner | delivery_partner | staff
+  name           String
+  users          User[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id              String            @id @default(cuid())
+  key             String            @unique // e.g. "orders.manage"
+  description     String?
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  userId       String
+  permissionId String
+  granted      Boolean
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@map("user_permissions")
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  name         String
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  isActive     Boolean  @default(true)
+  permVersion  Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userPermissions UserPermission[]
+  refreshTokens   RefreshToken[]
+  addresses       Address[]
+  cart            Cart?
+  orders          Order[]              @relation("CustomerOrders")
+  statusChanges   OrderStatusLog[]     @relation("StatusChangedBy")
+  assignmentsGiven    DeliveryAssignment[] @relation("AssignedBy")
+  assignmentsReceived DeliveryAssignment[] @relation("DeliveryPartner")
+  notifications   Notification[]
+  auditLogs       AuditLog[]           @relation("AuditActor")
+
+  @@index([roleId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  lat        Float?
+  lng        Float?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  orders Order[]
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// ── Restaurant / Menu ─────────────────────────────────────────────────────
+
+model Restaurant {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  logoUrl         String?
+  address         String?
+  phone           String?
+  isOpen          Boolean  @default(true)
+  opensAt         String? // "10:00"
+  closesAt        String? // "22:30"
+  minOrderAmount  Decimal  @default(0) @db.Decimal(10, 2)
+  deliveryFee     Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  categories Category[]
+
+  @@map("restaurants")
+}
+
+model Category {
+  id           String   @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+
+  menuItems MenuItem[]
+
+  @@index([restaurantId])
+  @@map("categories")
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  imageUrl    String?
+  isVeg       Boolean  @default(true)
+  isAvailable Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  modifierGroups ModifierGroup[]
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+
+  @@index([categoryId])
+  @@map("menu_items")
+}
+
+model ModifierGroup {
+  id         String   @id @default(cuid())
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  name       String
+  minSelect  Int      @default(0)
+  maxSelect  Int      @default(1)
+  required   Boolean  @default(false)
+
+  modifiers Modifier[]
+
+  @@index([menuItemId])
+  @@map("modifier_groups")
+}
+
+model Modifier {
+  id              String        @id @default(cuid())
+  modifierGroupId String
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  name            String
+  priceDelta      Decimal       @default(0) @db.Decimal(10, 2)
+
+  @@index([modifierGroupId])
+  @@map("modifiers")
+}
+
+// ── Cart ──────────────────────────────────────────────────────────────────
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  items     CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id                String   @id @default(cuid())
+  cartId            String
+  cart              Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItemId        String
+  menuItem          MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity          Int
+  selectedModifiers Json     @default("[]")
+  note              String?
+  createdAt         DateTime @default(now())
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+// ── Orders ────────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+}
+
+enum PaymentStatus {
+  PENDING
+  COLLECTED
+}
+
+model Order {
+  id           String        @id @default(cuid())
+  orderNumber  String        @unique
+  userId       String
+  user         User          @relation("CustomerOrders", fields: [userId], references: [id])
+  addressId    String
+  address      Address       @relation(fields: [addressId], references: [id])
+  status       OrderStatus   @default(PLACED)
+  subtotal     Decimal       @db.Decimal(10, 2)
+  deliveryFee  Decimal       @db.Decimal(10, 2)
+  discount     Decimal       @default(0) @db.Decimal(10, 2)
+  total        Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod @default(COD)
+  paymentStatus PaymentStatus @default(PENDING)
+  placedAt     DateTime      @default(now())
+  deliveredAt  DateTime?
+  cancelledAt  DateTime?
+  cancellationReason String?
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  items              OrderItem[]
+  statusLogs         OrderStatusLog[]
+  deliveryAssignment DeliveryAssignment?
+
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                String   @id @default(cuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId        String
+  menuItem          MenuItem @relation(fields: [menuItemId], references: [id])
+  nameSnapshot       String
+  priceSnapshot       Decimal  @db.Decimal(10, 2)
+  quantity          Int
+  selectedModifiers Json     @default("[]")
+  lineTotal          Decimal  @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderStatusLog {
+  id            String      @id @default(cuid())
+  orderId       String
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus    OrderStatus?
+  toStatus      OrderStatus
+  changedByUserId String
+  changedBy     User        @relation("StatusChangedBy", fields: [changedByUserId], references: [id])
+  note          String?
+  createdAt     DateTime    @default(now())
+
+  @@index([orderId])
+  @@map("order_status_logs")
+}
+
+// ── Delivery ──────────────────────────────────────────────────────────────
+
+enum DeliveryAssignmentStatus {
+  OFFERED
+  ACCEPTED
+  REJECTED
+  PICKED_UP
+  DELIVERED
+}
+
+model DeliveryAssignment {
+  id                 String                   @id @default(cuid())
+  orderId            String                   @unique
+  order              Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deliveryPartnerId  String
+  deliveryPartner    User                     @relation("DeliveryPartner", fields: [deliveryPartnerId], references: [id])
+  assignedByUserId   String
+  assignedBy         User                     @relation("AssignedBy", fields: [assignedByUserId], references: [id])
+  status             DeliveryAssignmentStatus @default(OFFERED)
+  assignedAt         DateTime                 @default(now())
+  acceptedAt         DateTime?
+  pickedUpAt         DateTime?
+  deliveredAt        DateTime?
+  proofImageUrl      String?
+  codCollected       Boolean                  @default(false)
+  codCollectedAt     DateTime?
+
+  @@index([deliveryPartnerId])
+  @@map("delivery_assignments")
+}
+
+// ── Notifications / Audit ────────────────────────────────────────────────
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH_STUB
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  channel   NotificationChannel @default(IN_APP)
+  isRead    Boolean             @default(false)
+  metadata  Json                @default("{}")
+  createdAt DateTime            @default(now())
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String
+  actor       User     @relation("AuditActor", fields: [actorUserId], references: [id])
+  action      String
+  entityType  String
+  entityId    String
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

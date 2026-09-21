@@ -1,0 +1,96 @@
+name: foodbowl
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: foodbowl
+      POSTGRES_PASSWORD: foodbowl
+      POSTGRES_DB: foodbowl
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U foodbowl']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.113.0
+    restart: unless-stopped
+    command: ['--config=/etc/otel-collector-config.yaml']
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - '4318:4318' # OTLP HTTP
+      - '4317:4317' # OTLP gRPC
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    ports:
+      - '16686:16686' # Jaeger UI
+
+  mailpit:
+    image: axllent/mailpit:v1.20
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://foodbowl:foodbowl@postgres:5432/foodbowl
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      SMTP_HOST: mailpit
+      WEB_ORIGIN: http://localhost:3000
+    ports:
+      - '4000:4000'
+    volumes:
+      - ../apps/api:/repo/apps/api
+      - ../packages/shared:/repo/packages/shared
+      - api_node_modules:/repo/apps/api/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+    ports:
+      - '3000:3000'
+    volumes:
+      - ../apps/web:/repo/apps/web
+      - ../packages/shared:/repo/packages/shared
+      - web_node_modules:/repo/apps/web/node_modules
+      - web_next_cache:/repo/apps/web/.next
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  api_node_modules:
+  web_node_modules:
+  web_next_cache:

@@ -3,6 +3,21 @@
 import * as React from 'react';
 import { apiClient } from '@/lib/api-client';
 
+export interface ModifierDTO {
+  id: string;
+  name: string;
+  priceDelta: string;
+}
+
+export interface ModifierGroupDTO {
+  id: string;
+  name: string;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  modifiers: ModifierDTO[];
+}
+
 export interface MenuItemDTO {
   id: string;
   name: string;
@@ -10,6 +25,8 @@ export interface MenuItemDTO {
   price: string;
   isVeg: boolean;
   isAvailable: boolean;
+  imageUrl: string | null;
+  modifierGroups: ModifierGroupDTO[];
 }
 
 export interface CategoryDTO {

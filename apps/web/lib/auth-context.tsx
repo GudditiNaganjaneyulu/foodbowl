@@ -15,8 +15,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   accessToken: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (input: { email: string; password: string; name: string; phone?: string }) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
+  register: (input: { email: string; password: string; name: string; phone?: string }) => Promise<AuthUser>;
   logout: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
 }
@@ -59,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
       applyAuthResult(result);
+      return result.user;
     },
     [applyAuthResult],
   );
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         input,
       );
       applyAuthResult(result);
+      return result.user;
     },
     [applyAuthResult],
   );

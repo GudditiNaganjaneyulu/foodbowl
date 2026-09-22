@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api-client';
+import { dashboardHomeFor } from '@/lib/dashboard-routes';
 
 const DEV_DEFAULT_PASSWORD = 'Password123!';
 const DEV_LOGINS = [
@@ -31,8 +32,8 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
-      router.push('/');
+      const loggedInUser = await login(email, password);
+      router.push(dashboardHomeFor(loggedInUser.role));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {

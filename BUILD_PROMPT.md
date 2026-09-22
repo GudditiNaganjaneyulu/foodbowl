@@ -51,6 +51,7 @@ Every external dependency here must run on a genuinely free tier — no credit-c
 - **Supabase** — free tier project, **Storage only** (we don't touch Supabase Auth/DB/Realtime, so usage stays well inside the free storage/bandwidth quota).
 - **Observability** — self-hosted, open-source, local: OpenTelemetry Collector + Jaeger via Docker Compose. Do **not** sign up for Datadog/Honeycomb/New Relic/etc. The OTLP pipeline can be pointed at one of those later purely via env var + collector config — nothing paid is required to build, run, or demo this project.
 - **Email** — **Brevo** (free tier, 300 emails/day, no card required) for real SMTP sends; Mailpit (local, free, Docker) remains available as a no-auth local fallback for offline dev. Don't wire a paid transactional email provider.
+- **Cache/rate limiting** — **Upstash Redis** (free tier, HTTP/REST client via `@upstash/redis`) for auth rate limiting and menu response caching. Optional at the code level — both features no-op cleanly when it's not configured, the app never hard-depends on it being up.
 - **Maps/geocoding** — if you want lat/lng on addresses, use a free option (OpenStreetMap Nominatim) or simply skip geocoding and store plain-text addresses — sufficient for a single-restaurant demo. Do not integrate Google Maps Platform (requires billing).
 - **SMS/Push** — none. The `PUSH_STUB` notification channel stays a no-op; don't wire Twilio/FCM paid tiers.
 - **Deployment (optional, only if going beyond localhost)** — Vercel free tier for the Next.js frontend, and a free-tier container host (Render/Fly.io free allowance) for the API/Docker services. Cold starts and sleep-on-idle are acceptable here since this isn't production traffic.
@@ -319,7 +320,7 @@ Realtime: Socket.IO namespace `/orders`, room per `order:{id}` (customer + assig
 - Log at service-layer boundaries (order placed, status transitioned, payment recorded, notification sent, permission denied) — not just HTTP access logs.
 
 **Tracing**
-- `@opentelemetry/sdk-node` with auto-instrumentation for Fastify, Prisma/pg, and outbound HTTP (Supabase calls). Bootstrap this file **first**, before any other import, in `apps/api/src/lib/tracing.ts`, required via `-r`/`--import` at process start.
+- `@opentelemetry/sdk-node` with auto-instrumentation for Fastify, Prisma/pg, and outbound HTTP (Supabase calls). Bootstrap this file **first**, before any other import, in `apps/api/src/lib/tracing.ts` — imported as the literal first line of `server.ts` (`import './lib/tracing'`), not via a `-r`/`--import` CLI flag. ES module import order guarantees that file's side effects run before anything it needs to instrument gets loaded, and it avoids a real bug hit in practice: `tsx watch` runs the app in a worker thread, and a `.ts` file passed via `--import` doesn't reliably get tsx's TypeScript loader applied to it there (`ERR_UNKNOWN_FILE_EXTENSION`) even though the same flag works fine outside watch mode.
 - Exporter: OTLP over HTTP, endpoint from `OTEL_EXPORTER_OTLP_ENDPOINT` env var — defaults to the local otel-collector in docker-compose. No vendor SDK imported directly; swapping backends later is an env var + collector config change only.
 - Custom spans around: order placement, status transitions, delivery assignment, payment recording — with meaningful attributes (`order.id`, `order.status`, `user.role`), not just auto-instrumented HTTP spans.
 - Local dev: docker-compose runs an **otel-collector** that fans out to **Jaeger** (UI at `localhost:16686`) so tracing is visibly working without signing up for anything.
@@ -451,6 +452,10 @@ SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASSWORD=
 SMTP_FROM=orders@foodbowl.local
+
+# Redis — Upstash free tier (optional: rate limiting + menu caching no-op without it)
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
 
 # App
 PORT=4000

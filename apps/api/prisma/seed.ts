@@ -11,6 +11,28 @@ import {
 const prisma = new PrismaClient();
 const DEV_PASSWORD = 'Password123!';
 
+interface SeedModifier {
+  name: string;
+  priceDelta: number;
+}
+interface SeedModifierGroup {
+  name: string;
+  minSelect: number;
+  maxSelect: number;
+  required: boolean;
+  modifiers: SeedModifier[];
+}
+interface SeedMenuItem {
+  name: string;
+  price: number;
+  isVeg: boolean;
+  modifierGroups?: SeedModifierGroup[];
+}
+interface SeedCategory {
+  name: string;
+  items: SeedMenuItem[];
+}
+
 async function main() {
   console.log('Seeding roles + permissions...');
   const roles = new Map<string, string>();
@@ -149,15 +171,62 @@ async function main() {
   }
 
   console.log('Seeding menu...');
-  const categoryDefs = [
+  const categoryDefs: SeedCategory[] = [
     { name: 'Starters', items: [
       { name: 'Crispy Spring Rolls', price: 5.99, isVeg: true },
       { name: 'Chicken Wings', price: 7.49, isVeg: false },
     ] },
     { name: 'Mains', items: [
-      { name: 'Butter Chicken', price: 12.99, isVeg: false },
+      {
+        name: 'Butter Chicken',
+        price: 12.99,
+        isVeg: false,
+        // Demonstrates both a required single-select group (radio-style —
+        // maxSelect 1) and an optional multi-select group (checkbox-style)
+        // for the frontend's item customization sheet.
+        modifierGroups: [
+          {
+            name: 'Spice Level',
+            minSelect: 1,
+            maxSelect: 1,
+            required: true,
+            modifiers: [
+              { name: 'Mild', priceDelta: 0 },
+              { name: 'Medium', priceDelta: 0 },
+              { name: 'Hot', priceDelta: 0 },
+            ],
+          },
+          {
+            name: 'Add-ons',
+            minSelect: 0,
+            maxSelect: 3,
+            required: false,
+            modifiers: [
+              { name: 'Extra Chicken', priceDelta: 2.5 },
+              { name: 'Extra Gravy', priceDelta: 1.5 },
+              { name: 'Butter Naan on the side', priceDelta: 2.99 },
+            ],
+          },
+        ],
+      },
       { name: 'Paneer Tikka Masala', price: 11.49, isVeg: true },
-      { name: 'Veg Fried Rice', price: 9.99, isVeg: true },
+      {
+        name: 'Veg Fried Rice',
+        price: 9.99,
+        isVeg: true,
+        modifierGroups: [
+          {
+            name: 'Portion Size',
+            minSelect: 1,
+            maxSelect: 1,
+            required: true,
+            modifiers: [
+              { name: 'Regular', priceDelta: 0 },
+              { name: 'Large', priceDelta: 3.0 },
+            ],
+          },
+        ],
+      },
     ] },
     { name: 'Breads', items: [
       { name: 'Garlic Naan', price: 2.99, isVeg: true },
@@ -194,6 +263,33 @@ async function main() {
         },
       });
       seededItems.push({ id: menuItem.id, price: item.price, name: menuItem.name });
+
+      for (const [k, group] of (item.modifierGroups ?? []).entries()) {
+        const modifierGroup = await prisma.modifierGroup.upsert({
+          where: { id: `seed-modgroup-${i}-${j}-${k}` },
+          update: {},
+          create: {
+            id: `seed-modgroup-${i}-${j}-${k}`,
+            menuItemId: menuItem.id,
+            name: group.name,
+            minSelect: group.minSelect,
+            maxSelect: group.maxSelect,
+            required: group.required,
+          },
+        });
+        for (const [l, mod] of group.modifiers.entries()) {
+          await prisma.modifier.upsert({
+            where: { id: `seed-modifier-${i}-${j}-${k}-${l}` },
+            update: {},
+            create: {
+              id: `seed-modifier-${i}-${j}-${k}-${l}`,
+              modifierGroupId: modifierGroup.id,
+              name: mod.name,
+              priceDelta: mod.priceDelta,
+            },
+          });
+        }
+      }
     }
   }
 

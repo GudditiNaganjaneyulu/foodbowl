@@ -2,24 +2,54 @@
 
 import * as React from 'react';
 
+export interface SelectedModifier {
+  id: string;
+  name: string;
+  priceDelta: number;
+}
+
 export interface CartLine {
+  /** Unique per distinct customization — see computeLineId below. */
+  lineId: string;
+  menuItemId: string;
+  name: string;
+  /** Unit price including any selected modifiers' price deltas. */
+  price: number;
+  quantity: number;
+  isVeg: boolean;
+  modifiers?: SelectedModifier[];
+}
+
+interface AddItemInput {
   menuItemId: string;
   name: string;
   price: number;
-  quantity: number;
+  isVeg: boolean;
+  modifiers?: SelectedModifier[];
 }
 
 interface CartContextValue {
   lines: CartLine[];
   itemCount: number;
   subtotal: number;
-  addItem: (item: Omit<CartLine, 'quantity'>) => void;
-  removeItem: (menuItemId: string) => void;
-  setQuantity: (menuItemId: string, quantity: number) => void;
+  addItem: (item: AddItemInput, quantity?: number) => void;
+  removeItem: (lineId: string) => void;
+  setQuantity: (lineId: string, quantity: number) => void;
   clear: () => void;
 }
 
 const CartContext = React.createContext<CartContextValue | undefined>(undefined);
+
+/**
+ * Same base item with different modifier selections (e.g. "Mild" vs "Hot"
+ * Butter Chicken) must NOT merge into one line — they're different orders.
+ * Plain items with no modifiers keep merging on menuItemId alone, same as
+ * before. Sorting the modifier ids means selection order doesn't matter.
+ */
+function computeLineId(menuItemId: string, modifiers?: SelectedModifier[]) {
+  if (!modifiers || modifiers.length === 0) return menuItemId;
+  return `${menuItemId}:${[...modifiers.map((m) => m.id)].sort().join(',')}`;
+}
 
 /**
  * Client-local cart state for now (demo/dev). Milestone 5 in BUILD_PROMPT.md
@@ -30,25 +60,26 @@ const CartContext = React.createContext<CartContextValue | undefined>(undefined)
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [lines, setLines] = React.useState<CartLine[]>([]);
 
-  const addItem = React.useCallback((item: Omit<CartLine, 'quantity'>) => {
+  const addItem = React.useCallback((item: AddItemInput, quantity = 1) => {
+    const lineId = computeLineId(item.menuItemId, item.modifiers);
     setLines((prev) => {
-      const existing = prev.find((l) => l.menuItemId === item.menuItemId);
+      const existing = prev.find((l) => l.lineId === lineId);
       if (existing) {
-        return prev.map((l) => (l.menuItemId === item.menuItemId ? { ...l, quantity: l.quantity + 1 } : l));
+        return prev.map((l) => (l.lineId === lineId ? { ...l, quantity: l.quantity + quantity } : l));
       }
-      return [...prev, { ...item, quantity: 1 }];
+      return [...prev, { ...item, lineId, quantity }];
     });
   }, []);
 
-  const removeItem = React.useCallback((menuItemId: string) => {
-    setLines((prev) => prev.filter((l) => l.menuItemId !== menuItemId));
+  const removeItem = React.useCallback((lineId: string) => {
+    setLines((prev) => prev.filter((l) => l.lineId !== lineId));
   }, []);
 
-  const setQuantity = React.useCallback((menuItemId: string, quantity: number) => {
+  const setQuantity = React.useCallback((lineId: string, quantity: number) => {
     setLines((prev) =>
       quantity <= 0
-        ? prev.filter((l) => l.menuItemId !== menuItemId)
-        : prev.map((l) => (l.menuItemId === menuItemId ? { ...l, quantity } : l)),
+        ? prev.filter((l) => l.lineId !== lineId)
+        : prev.map((l) => (l.lineId === lineId ? { ...l, quantity } : l)),
     );
   }, []);
 

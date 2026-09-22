@@ -15,7 +15,14 @@ COPY packages/shared packages/shared
 COPY apps/web apps/web
 WORKDIR /repo/apps/web
 EXPOSE 3000
-CMD ["pnpm", "dev"]
+# node_modules is a named volume (see docker-compose.yml) so the container's
+# own Linux-native install stays separate from the host's (macOS) one — but
+# that means it's EMPTY on first container start (a named volume mounted
+# inside an already bind-mounted parent directory doesn't reliably inherit
+# the image's baked-in contents, which is why `next` itself went missing at
+# runtime despite the image building successfully). Re-running install here
+# is fast — the pnpm store from the `deps` stage build is already warm.
+CMD ["sh", "-c", "pnpm install --filter @foodbowl/web... && pnpm dev"]
 
 FROM deps AS build
 COPY packages/shared packages/shared

@@ -1,3 +1,11 @@
+// MUST be the first import in the whole process: it registers OpenTelemetry's
+// module-patching hooks before anything it instruments (fastify, pg, http)
+// gets loaded. Previously this ran via `tsx --import ./lib/tracing.ts`, but
+// tsx's watch mode runs the app in a worker thread and doesn't reliably
+// forward that flag's TypeScript loading to it (ERR_UNKNOWN_FILE_EXTENSION
+// under Docker/Linux, even though it worked directly on the host) — a plain
+// first-line import has no such dependency on CLI flag propagation.
+import './lib/tracing';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';

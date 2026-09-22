@@ -1,48 +1,97 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { LayoutDashboard, LogOut, UserCircle2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient, ApiError } from '@/lib/api-client';
+import { dashboardHomeFor } from '@/lib/dashboard-routes';
+
+function initials(name: string) {
+  return name
+    .split(' ')
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
 
 export default function ProfilePage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logout } = useAuth();
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = React.useState(false);
 
   if (isLoading) return null;
 
   if (!user) {
     return (
-      <div className="container py-16 text-center text-muted-foreground">
-        Please log in to view your profile.
+      <div className="container flex flex-col items-center gap-3 py-24 text-center text-muted-foreground">
+        <UserCircle2 className="h-10 w-10" />
+        <p>Log in to view your profile, past orders, and account settings.</p>
+        <div className="mt-2 flex gap-2">
+          <Button asChild>
+            <Link href="/login">Log in</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/register">Sign up</Link>
+          </Button>
+        </div>
       </div>
     );
+  }
+
+  async function onLogout() {
+    setLoggingOut(true);
+    try {
+      await logout();
+      router.push('/');
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   return (
     <div className="container flex max-w-lg flex-col gap-6 py-8">
       <Card>
-        <CardHeader>
-          <CardTitle>Your profile</CardTitle>
-          <CardDescription>Basic account details.</CardDescription>
+        <CardHeader className="flex-row items-center gap-4 space-y-0">
+          <Avatar className="h-14 w-14">
+            <AvatarFallback className="text-lg">{initials(user.name)}</AvatarFallback>
+          </Avatar>
+          <div>
+            <CardTitle>{user.name}</CardTitle>
+            <CardDescription>{user.email}</CardDescription>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Name</span>
-            <span>{user.name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Email</span>
-            <span>{user.email}</span>
-          </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Role</span>
             <Badge variant="secondary">{user.role.replace('_', ' ')}</Badge>
           </div>
         </CardContent>
+        <CardFooter className="flex flex-col gap-2">
+          {user.role !== 'customer' && (
+            <Button variant="outline" className="w-full" asChild>
+              <Link href={dashboardHomeFor(user.role)}>
+                <LayoutDashboard className="h-4 w-4" /> Go to {user.role.replace('_', ' ')} dashboard
+              </Link>
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={onLogout}
+            disabled={loggingOut}
+          >
+            <LogOut className="h-4 w-4" /> {loggingOut ? 'Logging out…' : 'Log out'}
+          </Button>
+        </CardFooter>
       </Card>
 
       <ChangePasswordCard />

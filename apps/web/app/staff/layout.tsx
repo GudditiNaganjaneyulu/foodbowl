@@ -1,8 +1,9 @@
 'use client';
 
 import { ListOrdered, Truck, UtensilsCrossed } from 'lucide-react';
-import { PERMISSIONS } from '@foodbowl/shared';
+import { PERMISSIONS, ROLES } from '@foodbowl/shared';
 import { DashboardShell } from '@/components/layout/dashboard-shell';
+import { RequireRole } from '@/components/layout/require-role';
 import { usePermissions } from '@/lib/auth-context';
 
 /**
@@ -20,8 +21,10 @@ export default function StaffLayout({ children }: { children: React.ReactNode })
   ].filter((item) => hasPermission(item.permission));
 
   return (
-    <DashboardShell title="Staff console" navItems={navItems}>
-      {children}
-    </DashboardShell>
+    <RequireRole role={ROLES.STAFF}>
+      <DashboardShell title="Staff console" navItems={navItems}>
+        {children}
+      </DashboardShell>
+    </RequireRole>
   );
 }

@@ -1,7 +1,9 @@
 'use client';
 
 import { LayoutDashboard, ListOrdered, UtensilsCrossed, Users, Settings, Truck } from 'lucide-react';
+import { ROLES } from '@foodbowl/shared';
 import { DashboardShell } from '@/components/layout/dashboard-shell';
+import { RequireRole } from '@/components/layout/require-role';
 
 const ADMIN_NAV = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
@@ -14,8 +16,10 @@ const ADMIN_NAV = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <DashboardShell title="Owner dashboard" navItems={ADMIN_NAV}>
-      {children}
-    </DashboardShell>
+    <RequireRole role={ROLES.RESTAURANT_OWNER}>
+      <DashboardShell title="Owner dashboard" navItems={ADMIN_NAV}>
+        {children}
+      </DashboardShell>
+    </RequireRole>
   );
 }

@@ -47,6 +47,13 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().default('orders@foodbowl.local'),
+
+  // @upstash/redis is an HTTP/REST client (works over fetch, no persistent
+  // TCP socket — fine for a container, but specifically needs these REST
+  // credentials, not a rediss:// connection string). Optional: rate limiting
+  // and menu caching both no-op cleanly when unset — see lib/redis.ts.
+  UPSTASH_REDIS_REST_URL: z.string().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 });
 
 /**

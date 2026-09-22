@@ -110,4 +110,21 @@
     background-color: hsl(var(--border));
     border-radius: 999px;
   }
+
+  /* Fully hidden scrollbar for the category chip row — chips scroll, but the
+     scrollbar itself would look out of place next to touch-scrollable pills
+     (matches the Swiggy/Zomato pattern of a bare horizontal chip strip). */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Safe-area padding so fixed bottom bars (nav, cart) clear the home
+     indicator on notched phones instead of sitting under it. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }

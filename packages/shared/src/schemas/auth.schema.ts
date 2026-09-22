@@ -14,6 +14,12 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+});
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
 export const authResponseSchema = z.object({
   accessToken: z.string(),
   user: z.object({

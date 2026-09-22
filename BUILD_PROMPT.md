@@ -50,7 +50,7 @@ Every external dependency here must run on a genuinely free tier — no credit-c
 - **NeonDB** — use the free project tier (default branch, smallest compute). This project's data volume never needs more.
 - **Supabase** — free tier project, **Storage only** (we don't touch Supabase Auth/DB/Realtime, so usage stays well inside the free storage/bandwidth quota).
 - **Observability** — self-hosted, open-source, local: OpenTelemetry Collector + Jaeger via Docker Compose. Do **not** sign up for Datadog/Honeycomb/New Relic/etc. The OTLP pipeline can be pointed at one of those later purely via env var + collector config — nothing paid is required to build, run, or demo this project.
-- **Email** — Mailpit (local, free, Docker) for dev notification emails. Don't wire a paid transactional email provider; if a "real send" is ever wanted, pick one with a real free tier (e.g. Resend/Mailgun) as an optional add-on, not a requirement.
+- **Email** — **Brevo** (free tier, 300 emails/day, no card required) for real SMTP sends; Mailpit (local, free, Docker) remains available as a no-auth local fallback for offline dev. Don't wire a paid transactional email provider.
 - **Maps/geocoding** — if you want lat/lng on addresses, use a free option (OpenStreetMap Nominatim) or simply skip geocoding and store plain-text addresses — sufficient for a single-restaurant demo. Do not integrate Google Maps Platform (requires billing).
 - **SMS/Push** — none. The `PUSH_STUB` notification channel stays a no-op; don't wire Twilio/FCM paid tiers.
 - **Deployment (optional, only if going beyond localhost)** — Vercel free tier for the Next.js frontend, and a free-tier container host (Render/Fly.io free allowance) for the API/Docker services. Cold starts and sleep-on-idle are acceptable here since this isn't production traffic.
@@ -424,8 +424,8 @@ services:
 `.env.example` at repo root (and per-app if needed), validated at boot via a Zod schema in `apps/api/src/config/` so the app fails fast with a clear error if something's missing:
 
 ```
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/foodbowl   # or Neon connection string
+# Database — direct NeonDB connection (see apps/api/.env)
+DATABASE_URL=postgresql://user:pass@ep-example-pooler.region.aws.neon.tech/foodbowl?sslmode=require
 
 # Auth
 JWT_ACCESS_SECRET=
@@ -444,9 +444,12 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 OTEL_SERVICE_NAME=foodbowl-api
 LOG_LEVEL=info
 
-# Email (dev: mailpit)
-SMTP_HOST=mailpit
-SMTP_PORT=1025
+# Email — Brevo free tier (fall back to local mailpit:1025, no auth, for offline dev)
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
 SMTP_FROM=orders@foodbowl.local
 
 # App

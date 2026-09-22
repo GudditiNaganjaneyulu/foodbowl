@@ -7,6 +7,7 @@ import authPlugin from './plugins/auth';
 import errorHandlerPlugin from './plugins/error-handler';
 import authRoutes from './modules/auth/auth.routes';
 import adminUsersRoutes from './modules/users/admin-users.routes';
+import profileRoutes from './modules/users/profile.routes';
 import menuRoutes from './modules/menu/menu.routes';
 import healthRoutes from './modules/health/health.routes';
 
@@ -20,6 +21,7 @@ await fastify.register(errorHandlerPlugin);
 await fastify.register(healthRoutes);
 await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
 await fastify.register(adminUsersRoutes, { prefix: '/api/v1/admin/users' });
+await fastify.register(profileRoutes, { prefix: '/api/v1/users' });
 await fastify.register(menuRoutes, { prefix: '/api/v1/menu' });
 
 fastify

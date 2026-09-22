@@ -1,22 +1,24 @@
 name: foodbowl
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: foodbowl
-      POSTGRES_PASSWORD: foodbowl
-      POSTGRES_DB: foodbowl
-    ports:
-      - '5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U foodbowl']
-      interval: 5s
-      timeout: 5s
-      retries: 10
+  # Superseded by a direct NeonDB connection (DATABASE_URL in ../.env) — no
+  # local Postgres container needed. Uncomment to fall back to local Postgres.
+  # postgres:
+  #   image: postgres:16-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: foodbowl
+  #     POSTGRES_PASSWORD: foodbowl
+  #     POSTGRES_DB: foodbowl
+  #   ports:
+  #     - '5432:5432'
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ['CMD-SHELL', 'pg_isready -U foodbowl']
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.113.0
@@ -38,6 +40,8 @@ services:
     ports:
       - '16686:16686' # Jaeger UI
 
+  # Optional local SMTP catcher for offline testing — not used by default now
+  # that ../.env points SMTP_* at Brevo's free tier. Harmless to leave running.
   mailpit:
     image: axllent/mailpit:v1.20
     restart: unless-stopped
@@ -54,9 +58,11 @@ services:
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql://foodbowl:foodbowl@postgres:5432/foodbowl
+      # DATABASE_URL and SMTP_* now come from ../.env (direct NeonDB connection,
+      # Brevo SMTP) — no local-container overrides here anymore. Only override
+      # what genuinely differs inside the Docker network (otel-collector's
+      # hostname isn't reachable as "localhost" from inside the api container).
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      SMTP_HOST: mailpit
       WEB_ORIGIN: http://localhost:3000
     ports:
       - '4000:4000'
@@ -65,8 +71,6 @@ services:
       - ../packages/shared:/repo/packages/shared
       - api_node_modules:/repo/apps/api/node_modules
     depends_on:
-      postgres:
-        condition: service_healthy
       otel-collector:
         condition: service_started
 

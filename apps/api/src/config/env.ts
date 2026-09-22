@@ -1,5 +1,19 @@
-import 'dotenv/config';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import dotenv from 'dotenv';
 import { z } from 'zod';
+
+/**
+ * `dotenv/config`'s default lookup is relative to process.cwd(), which for
+ * `pnpm --filter @foodbowl/api dev` (run from the repo root) is actually
+ * apps/api, not the repo root where .env lives — so the default import
+ * silently found nothing. Resolve the path from this file's own location
+ * instead, so it works the same whether invoked via pnpm filter, directly
+ * inside apps/api, or from Docker (where no .env file exists at all and this
+ * is a harmless no-op — env vars already come from docker-compose's env_file).
+ */
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../');
+dotenv.config({ path: path.join(repoRoot, '.env') });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -24,8 +38,14 @@ const envSchema = z.object({
   OTEL_SERVICE_NAME: z.string().default('foodbowl-api'),
   LOG_LEVEL: z.string().default('info'),
 
+  // Defaults target local Mailpit (no auth). Brevo's free tier (300
+  // emails/day) needs SMTP_USER/SMTP_PASSWORD + SMTP_SECURE=false on port
+  // 587 (STARTTLS) — see .env.example.
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().default(1025),
+  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().default('orders@foodbowl.local'),
 });
 

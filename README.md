@@ -21,7 +21,9 @@ Milestone 1–2 scaffolding is in place:
 ### Prerequisites
 
 - Node.js 20+, pnpm 9+ (`corepack enable` will provide it)
-- Docker (for Postgres/Jaeger/otel-collector/Mailpit locally)
+- A [NeonDB](https://neon.tech) project (free tier) — the app connects to it directly, no local Postgres container
+- A [Brevo](https://www.brevo.com) account (free tier, 300 emails/day) for SMTP
+- Docker (for Jaeger/otel-collector locally; optionally Mailpit if you'd rather not use Brevo in dev)
 
 ### 1. Install dependencies
 
@@ -35,7 +37,11 @@ pnpm install
 cp .env.example .env
 ```
 
-The defaults point at the local Docker Postgres. To use **NeonDB** instead (free tier), replace `DATABASE_URL` with your Neon connection string — no code changes needed. To use **Supabase Storage**, fill in `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from a free Supabase project.
+Fill in:
+
+- `DATABASE_URL` — your Neon project's pooled connection string (Neon dashboard → Connection Details)
+- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — from a free Supabase project (Storage only)
+- `SMTP_USER` / `SMTP_PASSWORD` — from Brevo → SMTP & API → SMTP tab (password is the generated "SMTP key", not your account password); `SMTP_FROM` must be a sender verified in Brevo
 
 ### 3. Start infrastructure
 
@@ -43,12 +49,12 @@ The defaults point at the local Docker Postgres. To use **NeonDB** instead (free
 pnpm docker:up
 ```
 
-This starts Postgres, an OpenTelemetry Collector, Jaeger (trace UI at [localhost:16686](http://localhost:16686)), and Mailpit (dev email UI at [localhost:8025](http://localhost:8025)), plus the `api` and `web` containers themselves with hot reload.
+This starts an OpenTelemetry Collector and Jaeger (trace UI at [localhost:16686](http://localhost:16686)), plus the `api` and `web` containers with hot reload — both connect straight to Neon and Brevo via `.env`. The `postgres` and `mailpit` services in `infra/docker-compose.yml` are commented out/idle by default; uncomment `postgres` if you'd rather develop against a local DB, or point `SMTP_HOST` back at `mailpit` for a local, no-auth email catcher.
 
 Alternatively, run everything on the host without Docker for the app containers:
 
 ```bash
-docker compose -f infra/docker-compose.yml up postgres otel-collector jaeger mailpit -d
+docker compose -f infra/docker-compose.yml up otel-collector jaeger -d
 pnpm db:migrate
 pnpm db:seed
 pnpm dev
@@ -61,12 +67,24 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-The seed script prints demo login credentials for every role (owner, two staff with different permission grants, two delivery partners, three customers) — all use the password `Password123!`.
+### 5. Default logins
 
-### 5. Open the app
+The seed script creates one account per role, all on the same default password below. **This is the only bootstrap login** — every other user (staff, delivery partners, more owners) is created afterward from the owner's Users screen (see BUILD_PROMPT.md §3.4), not from the seed file.
+
+| Role | Email | Password | Dashboard URL |
+|---|---|---|---|
+| Restaurant owner ("super admin") | `owner@foodbowl.local` | `Password123!` | [localhost:3000/admin](http://localhost:3000/admin) |
+| Staff (orders.manage only) | `staff.orders@foodbowl.local` | `Password123!` | [localhost:3000/staff](http://localhost:3000/staff) |
+| Staff (+ menu.manage, delivery.assign) | `staff.menu@foodbowl.local` | `Password123!` | [localhost:3000/staff](http://localhost:3000/staff) |
+| Delivery partner | `delivery1@foodbowl.local` / `delivery2@foodbowl.local` | `Password123!` | [localhost:3000/delivery](http://localhost:3000/delivery) |
+| Customer | `customer1@foodbowl.local` / `customer2@foodbowl.local` / `customer3@foodbowl.local` | `Password123!` | [localhost:3000](http://localhost:3000) |
+
+**Change the default password before this ever runs anywhere but your own machine.** Every account can change its own password from [localhost:3000/profile](http://localhost:3000/profile) → Change password (`PATCH /api/v1/users/me/password`) — log in with the credentials above, then change it there. This is a plain seed password, not a forced-reset flow, so it's on you to actually change it.
+
+### 6. Open the app
 
 - Storefront: [localhost:3000](http://localhost:3000)
-- Owner dashboard: [localhost:3000/admin](http://localhost:3000/admin) (log in as `owner@foodbowl.local`)
+- Login: [localhost:3000/login](http://localhost:3000/login)
 - API health check: [localhost:4000/health](http://localhost:4000/health)
 - Traces: [localhost:16686](http://localhost:16686)
 
@@ -82,4 +100,4 @@ docs/         RBAC matrix, architecture notes, API reference (filled in as built
 
 ## Why free-tier only
 
-This is a testing/learning project — see BUILD_PROMPT.md §1.1. NeonDB and Supabase both have generous free tiers; observability and email run entirely on open-source, self-hosted containers (Jaeger, OTel Collector, Mailpit) so nothing here requires a paid account.
+This is a testing/learning project — see BUILD_PROMPT.md §1.1. NeonDB, Supabase, and Brevo all have generous free tiers with no card required; observability runs entirely on open-source, self-hosted containers (Jaeger, OTel Collector) so nothing here requires a paid account.

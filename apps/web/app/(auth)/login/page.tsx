@@ -10,6 +10,14 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api-client';
 
+const DEV_DEFAULT_PASSWORD = 'Password123!';
+const DEV_LOGINS = [
+  { label: 'Owner', email: 'owner@foodbowl.local' },
+  { label: 'Staff', email: 'staff.orders@foodbowl.local' },
+  { label: 'Delivery', email: 'delivery1@foodbowl.local' },
+  { label: 'Customer', email: 'customer1@foodbowl.local' },
+] as const;
+
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
@@ -72,6 +80,31 @@ export default function LoginPage() {
             Create an account
           </Link>
         </p>
+
+        {process.env.NODE_ENV !== 'production' && (
+          <div className="mt-6 rounded-md border border-dashed border-border p-3">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Dev only — seeded demo accounts (password: <code className="rounded bg-muted px-1">{DEV_DEFAULT_PASSWORD}</code>).
+              Change these from Profile → Change password once you've logged in.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {DEV_LOGINS.map((account) => (
+                <Button
+                  key={account.email}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEmail(account.email);
+                    setPassword(DEV_DEFAULT_PASSWORD);
+                  }}
+                >
+                  {account.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

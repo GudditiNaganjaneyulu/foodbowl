@@ -84,11 +84,11 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:4000
       NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
     ports:
-      - '3000:3000'
+      - '80:3000'
     volumes:
       - ../apps/web:/repo/apps/web
       - ../packages/shared:/repo/packages/shared
-      - web_node_modules:/repo/apps/web/node_modules
+      - web_node_modules:/repo/apps/web/node_module
       - web_next_cache:/repo/apps/web/.next
     depends_on:
       - api

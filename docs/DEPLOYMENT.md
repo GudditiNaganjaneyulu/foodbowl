@@ -23,12 +23,14 @@ Security group inbound rules:
 | Port | Purpose | Source |
 |---|---|---|
 | 22 | SSH | your IP (not `0.0.0.0/0`) |
-| 3000 | web | `0.0.0.0/0` |
+| 80 | web | `0.0.0.0/0` |
 | 4000 | api | `0.0.0.0/0` |
 
-(If you're putting Nginx/Caddy + a domain + TLS in front, open 80/443
-instead of 3000/4000 and skip exposing those directly — that's a
-reasonable next step but out of scope here.)
+The web container listens on 3000 internally, but `infra/docker-compose.prod.yml`
+publishes it as `'80:3000'` — host port 80 maps straight to the container's
+3000, no reverse proxy in front. Simple, and fine until you add TLS (at
+which point something needs to terminate it — Caddy or nginx + certbot are
+reasonable next steps, but out of scope here).
 
 ## 2. Install Docker on the instance
 
@@ -60,10 +62,12 @@ Supabase storage keys, Brevo SMTP creds, Upstash Redis, and generated
 Two vars matter more in production than locally:
 
 ```bash
-WEB_ORIGIN=http://<EC2_PUBLIC_IP>:3000
+WEB_ORIGIN=http://<EC2_PUBLIC_IP>
 NEXT_PUBLIC_API_URL=http://<EC2_PUBLIC_IP>:4000
 NEXT_PUBLIC_SOCKET_URL=http://<EC2_PUBLIC_IP>:4000
 ```
+
+(`WEB_ORIGIN` has no port — web is published on the default HTTP port 80.)
 
 `NEXT_PUBLIC_*` vars are compiled into the browser bundle at `next build`
 time, not read at container startup — get them right *before* the first
@@ -84,7 +88,7 @@ docker compose -f infra/docker-compose.prod.yml --env-file /home/ubuntu/.env ps
 Then check:
 
 - `http://<EC2_PUBLIC_IP>:4000/health`
-- `http://<EC2_PUBLIC_IP>:3000`
+- `http://<EC2_PUBLIC_IP>`
 
 If you need seed data on this environment, run it the same way you would
 locally, against the running api container:

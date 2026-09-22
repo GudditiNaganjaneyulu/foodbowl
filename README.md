@@ -105,6 +105,10 @@ infra/        docker-compose + otel-collector config
 docs/         Full setup guide, RBAC matrix, architecture notes, API reference (filled in as built)
 ```
 
+## Deployment
+
+See **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** for deploying to an EC2 instance — `infra/docker-compose.prod.yml` runs the same two images with the `prod` build target, and `.github/workflows/deploy.yml` redeploys on every push to `main` over SSH.
+
 ## Why free-tier only
 
 This is a testing/learning project — see BUILD_PROMPT.md §1.1. NeonDB, Supabase, Brevo, and Upstash all have generous free tiers with no card required; observability runs entirely on open-source, self-hosted containers (Jaeger, OTel Collector) so nothing here requires a paid account.

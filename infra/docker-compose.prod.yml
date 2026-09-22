@@ -1,0 +1,69 @@
+name: foodbowl
+
+# Production variant of docker-compose.yml — no bind-mounted source (images
+# are self-contained), no Mailpit (prod SMTP is Brevo), and the `prod` build
+# target on both apps instead of `dev`. Run from the repo root:
+#
+#   docker compose -f infra/docker-compose.prod.yml --env-file /home/ubuntu/.env build
+#   docker compose -f infra/docker-compose.prod.yml --env-file /home/ubuntu/.env up -d
+#
+# The env file lives at /home/ubuntu/.env — outside the repo checkout — so
+# that `git reset --hard` during a deploy can never touch it and a fresh
+# clone never needs it recreated. --env-file is required on the CLI even
+# though api also loads it via `env_file:` below — that only injects vars
+# into containers at runtime, whereas web's NEXT_PUBLIC_* vars are needed at
+# *build* time as `args:`, which Compose can only substitute from
+# --env-file (or the shell environment).
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.113.0
+    restart: unless-stopped
+    command: ['--config=/etc/otel-collector-config.yaml']
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - '4318:4318' # OTLP HTTP
+      - '4317:4317' # OTLP gRPC
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    ports:
+      - '16686:16686' # Jaeger UI
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: prod
+    restart: unless-stopped
+    env_file:
+      - /home/ubuntu/.env
+    environment:
+      # otel-collector's hostname isn't reachable as "localhost" from inside
+      # the api container — same override as the dev compose file.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports:
+      - '4000:4000'
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      target: prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api

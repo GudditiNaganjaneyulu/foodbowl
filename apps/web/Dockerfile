@@ -25,6 +25,14 @@ EXPOSE 3000
 CMD ["sh", "-c", "pnpm install --filter @foodbowl/web... && pnpm dev"]
 
 FROM deps AS build
+# NEXT_PUBLIC_* vars are inlined into the client bundle at build time, not
+# read at container startup — they have to arrive as build args (see
+# infra/docker-compose.prod.yml, which passes them from the root .env) rather
+# than as plain `environment:` entries on the prod service.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SOCKET_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
 COPY packages/shared packages/shared
 COPY apps/web apps/web
 WORKDIR /repo/apps/web

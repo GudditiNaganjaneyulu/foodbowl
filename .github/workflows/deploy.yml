@@ -1,0 +1,83 @@
+name: Deploy to EC2
+
+# One-time setup on the EC2 box before this workflow can run (see
+# docs/DEPLOYMENT.md): Docker + the Compose plugin installed, the repo
+# cloned to ~/foodbowl, and a production .env created by hand at
+# /home/ubuntu/.env — outside the repo checkout, so `git reset --hard` below
+# can never touch it and it's never recreated on a fresh clone. This workflow
+# only ever does `git pull` + rebuild on top of that, it never creates the
+# initial checkout or writes secrets to disk.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   EC2_HOST        public IP or DNS name of the instance
+#   EC2_USERNAME     ssh user, e.g. ubuntu (Ubuntu AMI) or ec2-user (AL2023)
+#   EC2_SSH_KEY      private key matching the .pem paired with the instance,
+#                    full contents including the BEGIN/END lines
+#   EC2_SSH_PORT     optional, defaults to 22
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            APP_DIR=~/foodbowl
+            COMPOSE="docker compose -f infra/docker-compose.prod.yml --env-file /home/ubuntu/.env"
+
+            cd "$APP_DIR"
+
+            echo "→ pulling latest main"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "→ building images"
+            $COMPOSE build
+
+            echo "→ applying database migrations"
+            $COMPOSE run --rm api pnpm db:deploy
+
+            echo "→ starting containers"
+            $COMPOSE up -d --remove-orphans
+
+            echo "→ pruning dangling images"
+            docker image prune -f
+
+            echo "→ current container status"
+            $COMPOSE ps
+
+      - name: Verify API health
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            for i in $(seq 1 10); do
+              if curl -fsS http://localhost:4000/health >/dev/null; then
+                echo "API is healthy"
+                exit 0
+              fi
+              echo "waiting for API to come up ($i/10)..."
+              sleep 3
+            done
+            echo "API did not become healthy in time" >&2
+            exit 1

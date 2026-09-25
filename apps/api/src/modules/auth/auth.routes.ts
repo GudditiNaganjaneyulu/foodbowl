@@ -4,6 +4,7 @@ import { env } from '../../config/env';
 import { requireAuth } from '../../plugins/auth';
 import { rateLimit } from '../../lib/rate-limit';
 import * as authService from './auth.service';
+import { loginDocs, logoutDocs, refreshDocs, registerDocs } from './auth.docs';
 
 const REFRESH_COOKIE = 'foodbowl_refresh_token';
 
@@ -12,7 +13,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     '/register',
     // Loose limit — mainly to slow down scripted account-creation spam, not
     // to annoy a real person who mistypes a password once or twice.
-    { preHandler: rateLimit({ windowSeconds: 60 * 60, max: 10, keyPrefix: 'register' }) },
+    { schema: registerDocs, preHandler: rateLimit({ windowSeconds: 60 * 60, max: 10, keyPrefix: 'register' }) },
     async (request, reply) => {
       const body = registerSchema.parse(request.body);
       const { refreshToken, ...result } = await authService.register(body);
@@ -26,7 +27,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     // Tighter limit — this is the actual brute-force/credential-stuffing
     // target. 10/min per IP is generous for a real user, punishing for a
     // password-guessing script.
-    { preHandler: rateLimit({ windowSeconds: 60, max: 10, keyPrefix: 'login' }) },
+    { schema: loginDocs, preHandler: rateLimit({ windowSeconds: 60, max: 10, keyPrefix: 'login' }) },
     async (request, reply) => {
       const body = loginSchema.parse(request.body);
       const { refreshToken, ...result } = await authService.login(body);
@@ -35,7 +36,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     },
   );
 
-  fastify.post('/refresh', async (request, reply) => {
+  fastify.post('/refresh', { schema: refreshDocs }, async (request, reply) => {
     const token = request.cookies[REFRESH_COOKIE];
     if (!token) return reply.code(401).send({ error: 'No refresh token' });
     const { refreshToken, ...result } = await authService.refresh(token);
@@ -43,7 +44,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     return result;
   });
 
-  fastify.post('/logout', { preHandler: requireAuth }, async (request, reply) => {
+  fastify.post('/logout', { schema: logoutDocs, preHandler: requireAuth }, async (request, reply) => {
     await authService.logoutAll(request.user!.sub);
     reply.clearCookie(REFRESH_COOKIE, { path: '/' });
     return { ok: true };

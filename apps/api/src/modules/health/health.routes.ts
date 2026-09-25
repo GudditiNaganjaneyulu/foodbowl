@@ -1,10 +1,11 @@
 import type { FastifyInstance } from 'fastify';
+import { healthDocs, readinessDocs } from './health.docs';
 import { prisma } from '../../db/prisma';
 
 export default async function healthRoutes(fastify: FastifyInstance) {
-  fastify.get('/health', async () => ({ status: 'ok' }));
+  fastify.get('/health', { schema: healthDocs }, async () => ({ status: 'ok' }));
 
-  fastify.get('/health/ready', async (_request, reply) => {
+  fastify.get('/health/ready', { schema: readinessDocs }, async (_request, reply) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
       return { status: 'ready', db: 'connected' };

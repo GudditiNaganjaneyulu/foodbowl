@@ -88,6 +88,7 @@ docker compose -f infra/docker-compose.prod.yml --env-file /home/ubuntu/.env ps
 Then check:
 
 - `http://<EC2_PUBLIC_IP>:4000/health`
+- `http://<EC2_PUBLIC_IP>:4000/docs` (Swagger UI)
 - `http://<EC2_PUBLIC_IP>`
 
 If you need seed data on this environment, run it the same way you would

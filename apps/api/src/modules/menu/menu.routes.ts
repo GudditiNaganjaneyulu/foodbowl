@@ -5,6 +5,13 @@ import { requirePermission } from '../../lib/rbac';
 import { prisma } from '../../db/prisma';
 import { redis } from '../../lib/redis';
 import { logger } from '../../lib/logger';
+import {
+  createCategoryDocs,
+  createMenuItemDocs,
+  deleteMenuItemDocs,
+  getMenuDocs,
+  updateMenuItemDocs,
+} from './menu.docs';
 
 const MENU_CACHE_KEY = 'menu:public';
 const MENU_CACHE_TTL_SECONDS = 60;
@@ -25,7 +32,7 @@ export default async function menuRoutes(fastify: FastifyInstance) {
   // Postgres on a miss or when Redis isn't configured, repopulate with a
   // short TTL. Every mutating route below invalidates it explicitly too, so
   // edits show up immediately rather than waiting out the TTL.
-  fastify.get('/', async () => {
+  fastify.get('/', { schema: getMenuDocs }, async () => {
     if (redis) {
       try {
         const cached = await redis.get(MENU_CACHE_KEY);
@@ -59,7 +66,7 @@ export default async function menuRoutes(fastify: FastifyInstance) {
 
   fastify.post(
     '/categories',
-    { preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
+    { schema: createCategoryDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
     async (request, reply) => {
       const body = createCategorySchema.parse(request.body);
       const restaurant = await prisma.restaurant.findFirstOrThrow();
@@ -73,7 +80,7 @@ export default async function menuRoutes(fastify: FastifyInstance) {
 
   fastify.post(
     '/items',
-    { preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
+    { schema: createMenuItemDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
     async (request, reply) => {
       const body = createMenuItemSchema.parse(request.body);
       const { modifierGroups, ...itemData } = body;
@@ -99,7 +106,7 @@ export default async function menuRoutes(fastify: FastifyInstance) {
 
   fastify.patch(
     '/items/:id',
-    { preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
+    { schema: updateMenuItemDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
     async (request) => {
       const { id } = request.params as { id: string };
       const body = updateMenuItemSchema.parse(request.body);
@@ -111,7 +118,7 @@ export default async function menuRoutes(fastify: FastifyInstance) {
 
   fastify.delete(
     '/items/:id',
-    { preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
+    { schema: deleteMenuItemDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       await prisma.menuItem.delete({ where: { id } });

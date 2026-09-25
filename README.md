@@ -93,6 +93,7 @@ See **[docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)** for what each seede
 - Storefront: [localhost:3000](http://localhost:3000)
 - Login: [localhost:3000/login](http://localhost:3000/login)
 - API health check: [localhost:4000/health](http://localhost:4000/health)
+- API docs (Swagger UI): [localhost:4000/docs](http://localhost:4000/docs) — raw spec at `/docs/json`
 - Traces: [localhost:16686](http://localhost:16686)
 
 ## Monorepo layout

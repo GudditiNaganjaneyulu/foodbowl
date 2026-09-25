@@ -3,6 +3,7 @@ import { changePasswordSchema } from '@foodbowl/shared';
 import { requireAuth } from '../../plugins/auth';
 import { rateLimit } from '../../lib/rate-limit';
 import * as profileService from './profile.service';
+import { changePasswordDocs } from './profile.docs';
 
 /**
  * Self-service account actions for the logged-in user (any role) — as
@@ -16,7 +17,7 @@ export default async function profileRoutes(fastify: FastifyInstance) {
     '/me/password',
     // A stolen access token still needs the current password to actually
     // change it — rate-limited so that can't be brute-forced either.
-    { preHandler: rateLimit({ windowSeconds: 60, max: 10, keyPrefix: 'change-password' }) },
+    { schema: changePasswordDocs, preHandler: rateLimit({ windowSeconds: 60, max: 10, keyPrefix: 'change-password' }) },
     async (request, reply) => {
       const body = changePasswordSchema.parse(request.body);
       await profileService.changePassword(request.user!.sub, body);

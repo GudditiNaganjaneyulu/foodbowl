@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { PermissionKey } from '@foodbowl/shared';
 import { prisma } from '../db/prisma';
+import { HttpError } from './http-error';
 
 /**
  * Resolves a user's effective permission set: role defaults (RolePermission)
@@ -53,4 +54,26 @@ export function requireRole(...roles: string[]) {
       return reply.code(403).send({ error: 'Forbidden for this role' });
     }
   };
+}
+
+export interface Actor {
+  userId: string;
+  /** Role key, read from the database (not the JWT) so role changes apply immediately. */
+  role: string;
+  permissions: ReadonlySet<string>;
+}
+
+/**
+ * The acting user for service-layer authorization. Unlike requireAuth (which
+ * only verifies the token), this re-reads the user, so a deactivated account
+ * or a just-changed role is honoured even while its access token is still
+ * inside its 15-minute lifetime.
+ */
+export async function getActor(userId: string): Promise<Actor> {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { isActive: true, role: { select: { key: true } } },
+  });
+  if (!user.isActive) throw new HttpError('Account deactivated', 403);
+  return { userId, role: user.role.key, permissions: await getEffectivePermissions(userId) };
 }

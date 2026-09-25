@@ -40,7 +40,7 @@ export const idParam: JsonSchema = {
   properties: { id: { type: 'string', description: 'Record id (cuid).', example: 'cm0abc123def456' } },
 };
 
-type ErrorStatus = 400 | 401 | 403 | 409 | 429;
+type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 503;
 
 /**
  * Builds the error entries of a route's `response` map from

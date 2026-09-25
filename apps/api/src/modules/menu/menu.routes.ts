@@ -1,15 +1,28 @@
 import type { FastifyInstance } from 'fastify';
-import { createCategorySchema, createMenuItemSchema, updateMenuItemSchema, PERMISSIONS } from '@foodbowl/shared';
+import {
+  createCategorySchema,
+  createMenuItemSchema,
+  modifierGroupSchema,
+  updateCategorySchema,
+  updateMenuItemSchema,
+  PERMISSIONS,
+} from '@foodbowl/shared';
+import { HttpError } from '../../lib/http-error';
+import { moneyStrings } from './menu.dto';
 import { requireAuth } from '../../plugins/auth';
 import { requirePermission } from '../../lib/rbac';
 import { prisma } from '../../db/prisma';
 import { redis } from '../../lib/redis';
 import { logger } from '../../lib/logger';
 import {
+  adminMenuDocs,
   createCategoryDocs,
   createMenuItemDocs,
+  createModifierGroupDocs,
   deleteMenuItemDocs,
+  deleteModifierGroupDocs,
   getMenuDocs,
+  updateCategoryDocs,
   updateMenuItemDocs,
 } from './menu.docs';
 
@@ -53,7 +66,7 @@ export default async function menuRoutes(fastify: FastifyInstance) {
         },
       },
     });
-    const result = { categories };
+    const result = moneyStrings({ categories });
 
     if (redis) {
       redis.set(MENU_CACHE_KEY, result, { ex: MENU_CACHE_TTL_SECONDS }).catch((err) => {
@@ -63,6 +76,37 @@ export default async function menuRoutes(fastify: FastifyInstance) {
 
     return result;
   });
+
+  // Everything, including hidden categories and unavailable items, for the
+  // management screen. Never cached: an editor must see their own change at once.
+  fastify.get(
+    '/admin',
+    { schema: adminMenuDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
+    async () => {
+      const categories = await prisma.category.findMany({
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          menuItems: {
+            orderBy: { sortOrder: 'asc' },
+            include: { modifierGroups: { include: { modifiers: true } } },
+          },
+        },
+      });
+      return moneyStrings({ categories });
+    },
+  );
+
+  fastify.patch(
+    '/categories/:id',
+    { schema: updateCategoryDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = updateCategorySchema.parse(request.body);
+      const category = await prisma.category.update({ where: { id }, data: body });
+      await invalidateMenuCache();
+      return category;
+    },
+  );
 
   fastify.post(
     '/categories',
@@ -84,6 +128,9 @@ export default async function menuRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const body = createMenuItemSchema.parse(request.body);
       const { modifierGroups, ...itemData } = body;
+      if (!(await prisma.category.findUnique({ where: { id: itemData.categoryId }, select: { id: true } }))) {
+        throw new HttpError('Unknown category', 400);
+      }
       const item = await prisma.menuItem.create({
         data: {
           ...itemData,
@@ -100,7 +147,7 @@ export default async function menuRoutes(fastify: FastifyInstance) {
         include: { modifierGroups: { include: { modifiers: true } } },
       });
       await invalidateMenuCache();
-      return reply.code(201).send(item);
+      return reply.code(201).send(moneyStrings(item));
     },
   );
 
@@ -112,7 +159,7 @@ export default async function menuRoutes(fastify: FastifyInstance) {
       const body = updateMenuItemSchema.parse(request.body);
       const item = await prisma.menuItem.update({ where: { id }, data: body });
       await invalidateMenuCache();
-      return item;
+      return moneyStrings(item);
     },
   );
 
@@ -121,7 +168,45 @@ export default async function menuRoutes(fastify: FastifyInstance) {
     { schema: deleteMenuItemDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      await prisma.menuItem.delete({ where: { id } });
+      const ordered = await prisma.orderItem.count({ where: { menuItemId: id } });
+      if (ordered > 0) {
+        throw new HttpError('This item appears in past orders and cannot be deleted — mark it unavailable instead', 409);
+      }
+      // Carts are transient; drop the item from anyone's cart rather than blocking on it.
+      await prisma.$transaction([
+        prisma.cartItem.deleteMany({ where: { menuItemId: id } }),
+        prisma.menuItem.delete({ where: { id } }),
+      ]);
+      await invalidateMenuCache();
+      return reply.code(204).send();
+    },
+  );
+
+  fastify.post(
+    '/items/:id/modifier-groups',
+    { schema: createModifierGroupDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { modifiers, ...group } = modifierGroupSchema.parse(request.body);
+      await prisma.menuItem.findUniqueOrThrow({ where: { id }, select: { id: true } });
+      const created = await prisma.modifierGroup.create({
+        data: { ...group, menuItemId: id, modifiers: { create: modifiers } },
+        include: { modifiers: true },
+      });
+      await invalidateMenuCache();
+      return reply.code(201).send(moneyStrings(created));
+    },
+  );
+
+  fastify.delete(
+    '/modifier-groups/:id',
+    { schema: deleteModifierGroupDocs, preHandler: [requireAuth, requirePermission(PERMISSIONS.MENU_MANAGE)] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      // Cart lines that chose one of this group's options would become
+      // unpriceable; they're flagged unavailable (see cart pricing) and the
+      // customer can remove them. Past orders keep their own snapshot.
+      await prisma.modifierGroup.delete({ where: { id } });
       await invalidateMenuCache();
       return reply.code(204).send();
     },

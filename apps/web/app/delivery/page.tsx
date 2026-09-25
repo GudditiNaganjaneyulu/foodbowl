@@ -1,12 +1,5 @@
-import { Truck } from 'lucide-react';
-import { ComingSoon } from '@/components/layout/coming-soon';
+import { RiderBoard } from '@/components/delivery/rider-board';
 
 export default function DeliveryQueuePage() {
-  return (
-    <ComingSoon
-      icon={Truck}
-      title="My deliveries"
-      note="Offered/active deliveries with accept, pickup, and delivered-with-COD-confirmation actions. Lands in BUILD_PROMPT.md milestone 8."
-    />
-  );
+  return <RiderBoard scope="active" />;
 }

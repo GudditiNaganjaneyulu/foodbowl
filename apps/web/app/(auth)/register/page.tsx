@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/auth-context';
+import { nextPathFromLocation } from '@/lib/safe-redirect';
 import { ApiError } from '@/lib/api-client';
 
 export default function RegisterPage() {
@@ -23,7 +24,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register(form);
-      router.push('/');
+      router.push(nextPathFromLocation() ?? '/');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {

@@ -1,12 +1,13 @@
-import { Truck } from 'lucide-react';
-import { ComingSoon } from '@/components/layout/coming-soon';
+'use client';
+
+import { PERMISSIONS } from '@foodbowl/shared';
+import { DispatchBoard } from '@/components/delivery/dispatch-board';
+import { RequirePermission } from '@/components/layout/require-permission';
 
 export default function StaffDeliveryPage() {
   return (
-    <ComingSoon
-      icon={Truck}
-      title="Delivery assignment"
-      note="Visible only to staff granted delivery.assign. Lands in BUILD_PROMPT.md milestone 8."
-    />
+    <RequirePermission permission={PERMISSIONS.DELIVERY_ASSIGN}>
+      <DispatchBoard />
+    </RequirePermission>
   );
 }

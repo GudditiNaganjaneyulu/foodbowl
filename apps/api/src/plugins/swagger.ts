@@ -37,6 +37,23 @@ ${rolesTable}
 
 Owner-only permissions that can never be granted to staff: ${OWNER_ONLY_PERMISSIONS.map((p) => `\`${p}\``).join(', ')}.
 
+## Realtime (Socket.IO)
+
+Order updates are pushed over Socket.IO, which OpenAPI cannot describe. Connect to the
+**\`/orders\`** namespace with \`{ auth: { token: <access token> } }\`. Every connection is
+automatically placed in its private \`user:{id}\` room. Then, optionally:
+
+| Client emits | Effect |
+|---|---|
+| \`order:join\` (orderId, ack) | Join \`order:{id}\` — allowed for the customer, staff with \`orders.view\`, or the assigned rider |
+| \`queue:join\` (ack) | Join \`restaurant:orders\` — requires \`orders.view\` |
+
+| Server emits | Payload |
+|---|---|
+| \`order:placed\` | Full **Order** — sent to the queue and the customer |
+| \`order:updated\` | Full **Order** (with \`statusLogs\`) on every status or delivery change |
+| \`notification:new\` | **Notification** — to the recipient's \`user:{id}\` room |
+
 ## Errors
 
 Errors are JSON: \`{ "error": "message" }\`. Request-body validation failures return **400**
@@ -67,7 +84,7 @@ export default fp(async (fastify) => {
         description,
       },
       tags: [
-        { name: 'Health', description: 'Liveness probe.' },
+        { name: 'Health', description: 'Liveness and readiness probes.' },
         { name: 'Auth', description: 'Registration, login, token refresh and logout.' },
         { name: 'Profile', description: 'Self-service actions for the logged-in user (any role).' },
         {
@@ -78,6 +95,13 @@ export default fp(async (fastify) => {
           name: 'Menu',
           description: 'Public menu browsing, plus menu management for users with `menu.manage`.',
         },
+        { name: 'Restaurant', description: 'Public restaurant details; owner-managed settings.' },
+        { name: 'Cart', description: 'The logged-in user\'s persistent shopping cart.' },
+        { name: 'Orders', description: 'Placing, tracking and advancing orders (cash on delivery).' },
+        { name: 'Delivery', description: 'Assigning orders to delivery partners and the partner\'s pickup/delivery steps.' },
+        { name: 'Reports', description: 'Owner dashboard numbers (requires `reports.view`).' },
+        { name: 'Uploads', description: 'Signed URLs for direct-to-storage image uploads.' },
+        { name: 'Notifications', description: 'In-app notifications (also pushed live over Socket.IO).' },
       ],
       components: {
         securitySchemes: {

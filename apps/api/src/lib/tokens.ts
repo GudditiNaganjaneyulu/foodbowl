@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { env } from '../config/env';
 
@@ -29,8 +30,13 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenClaim
 }
 
 export async function signRefreshToken(userId: string): Promise<string> {
+  // The unique jti matters: iat only has one-second resolution, so without it
+  // two refresh tokens minted for the same user within a second are
+  // byte-identical — which makes "rotation" a no-op and lets a revoked token
+  // keep matching its replacement's stored hash.
   return new SignJWT({})
     .setProtectedHeader({ alg: 'HS256' })
+    .setJti(randomUUID())
     .setSubject(userId)
     .setIssuedAt()
     .setExpirationTime(env.REFRESH_TOKEN_TTL)

@@ -6,34 +6,11 @@
 // under Docker/Linux, even though it worked directly on the host) — a plain
 // first-line import has no such dependency on CLI flag propagation.
 import './lib/tracing';
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import cookie from '@fastify/cookie';
 import { env } from './config/env';
 import { logger } from './lib/logger';
-import authPlugin from './plugins/auth';
-import errorHandlerPlugin from './plugins/error-handler';
-import swaggerPlugin from './plugins/swagger';
-import authRoutes from './modules/auth/auth.routes';
-import adminUsersRoutes from './modules/users/admin-users.routes';
-import profileRoutes from './modules/users/profile.routes';
-import menuRoutes from './modules/menu/menu.routes';
-import healthRoutes from './modules/health/health.routes';
+import { buildApp } from './app';
 
-const fastify = Fastify({ loggerInstance: logger as never });
-
-await fastify.register(cors, { origin: env.WEB_ORIGIN, credentials: true });
-await fastify.register(cookie);
-await fastify.register(authPlugin);
-await fastify.register(errorHandlerPlugin);
-// Must come before any route is registered so the OpenAPI spec sees them all.
-await fastify.register(swaggerPlugin);
-
-await fastify.register(healthRoutes);
-await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
-await fastify.register(adminUsersRoutes, { prefix: '/api/v1/admin/users' });
-await fastify.register(profileRoutes, { prefix: '/api/v1/users' });
-await fastify.register(menuRoutes, { prefix: '/api/v1/menu' });
+const fastify = await buildApp();
 
 fastify
   .listen({ port: env.PORT, host: '0.0.0.0' })

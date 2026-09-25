@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api-client';
 import { dashboardHomeFor } from '@/lib/dashboard-routes';
+import { nextPathFromLocation } from '@/lib/safe-redirect';
 
 const DEV_DEFAULT_PASSWORD = 'Password123!';
 const DEV_LOGINS = [
@@ -33,7 +34,9 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const loggedInUser = await login(email, password);
-      router.push(dashboardHomeFor(loggedInUser.role));
+      // Customers return to where they were (e.g. /cart); staff always land on their dashboard.
+      const next = nextPathFromLocation();
+      router.push(loggedInUser.role === 'customer' && next ? next : dashboardHomeFor(loggedInUser.role));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -77,7 +80,10 @@ export default function LoginPage() {
         </form>
         <p className="mt-6 text-center text-sm text-muted-foreground">
           New customer?{' '}
-          <Link href="/register" className="font-medium text-primary hover:underline">
+          <Link
+            href={typeof window !== 'undefined' && window.location.search ? `/register${window.location.search}` : '/register'}
+            className="font-medium text-primary hover:underline"
+          >
             Create an account
           </Link>
         </p>

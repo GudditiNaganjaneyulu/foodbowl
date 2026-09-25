@@ -1,12 +1,13 @@
-import { UtensilsCrossed } from 'lucide-react';
-import { ComingSoon } from '@/components/layout/coming-soon';
+'use client';
+
+import { PERMISSIONS } from '@foodbowl/shared';
+import { RequirePermission } from '@/components/layout/require-permission';
+import { MenuManager } from '@/components/menu-admin/menu-manager';
 
 export default function StaffMenuPage() {
   return (
-    <ComingSoon
-      icon={UtensilsCrossed}
-      title="Menu management"
-      note="Visible only to staff granted menu.manage. Lands in BUILD_PROMPT.md milestone 4."
-    />
+    <RequirePermission permission={PERMISSIONS.MENU_MANAGE}>
+      <MenuManager />
+    </RequirePermission>
   );
 }

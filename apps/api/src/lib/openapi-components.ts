@@ -1,5 +1,6 @@
 import { ALL_PERMISSIONS, ALL_ROLES } from '@foodbowl/shared';
 import { ref, type JsonSchema } from './openapi';
+import { shopComponentSchemas } from './openapi-components-shop';
 
 const id = (description: string): JsonSchema => ({ type: 'string', description, example: 'cm0abc123def456' });
 const timestamp = (description: string): JsonSchema => ({
@@ -16,6 +17,8 @@ const decimal = (description: string, example: string): JsonSchema => ({
 });
 
 export const componentSchemas: Record<string, JsonSchema> = {
+  ...shopComponentSchemas,
+
   ErrorResponse: {
     type: 'object',
     required: ['error'],

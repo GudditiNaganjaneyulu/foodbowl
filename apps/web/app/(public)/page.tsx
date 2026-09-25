@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Clock, MapPin, Search, ServerCrash, X } from 'lucide-react';
+import type { RestaurantDTO } from '@foodbowl/shared';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
@@ -9,15 +10,28 @@ import { Button } from '@/components/ui/button';
 import { MenuItemRow } from '@/components/menu/menu-item-row';
 import { VegIndicator } from '@/components/menu/veg-indicator';
 import { ItemDetailSheet } from '@/components/menu/item-detail-sheet';
+import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useMenu, type MenuItemDTO } from './use-menu';
-import { CategoryChips } from './category-chips';
+import { CategoryChips, CategorySidebar } from './category-chips';
+
+/** "22:30" → "10:30 PM" */
+function formatClock(hhmm: string) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(2000, 0, 1, h, m);
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
 
 export default function LandingPage() {
   const { categories, error, isLoading } = useMenu();
   const [search, setSearch] = React.useState('');
   const [vegOnly, setVegOnly] = React.useState(false);
   const [detailItem, setDetailItem] = React.useState<MenuItemDTO | null>(null);
+  const [restaurant, setRestaurant] = React.useState<RestaurantDTO | null>(null);
+
+  React.useEffect(() => {
+    apiClient.get<RestaurantDTO>('/api/v1/restaurant').then(setRestaurant).catch(() => undefined);
+  }, []);
 
   const filteredCategories = React.useMemo(() => {
     if (!categories) return null;
@@ -40,22 +54,31 @@ export default function LandingPage() {
       <section className="border-b border-border bg-gradient-to-b from-accent/60 to-background">
         <div className="container flex flex-col gap-3 py-6 md:py-10">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="success" className="gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-success-foreground/80" /> Open now
-            </Badge>
-            <span className="text-xs text-muted-foreground">10:00 AM – 10:30 PM</span>
+            {restaurant && (
+              <Badge variant={restaurant.isOpen ? 'success' : 'destructive'} className="gap-1" data-testid="open-badge">
+                <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" /> {restaurant.isOpen ? 'Open now' : 'Closed — not taking orders'}
+              </Badge>
+            )}
+            {restaurant?.opensAt && restaurant.closesAt && (
+              <span className="text-xs text-muted-foreground">
+                {formatClock(restaurant.opensAt)} – {formatClock(restaurant.closesAt)}
+              </span>
+            )}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight md:text-4xl">FoodBowl Kitchen</h1>
-          <p className="max-w-xl text-sm text-muted-foreground md:text-base">
-            Home-style comfort food, made fresh to order and delivered straight to your door.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight md:text-4xl">{restaurant?.name ?? 'FoodBowl Kitchen'}</h1>
+          {restaurant?.description && <p className="max-w-xl text-sm text-muted-foreground md:text-base">{restaurant.description}</p>}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground md:text-sm">
-            <span className="flex items-center gap-1.5">
-              <MapPin className="h-3.5 w-3.5" /> 221B Curry Lane, Flavor Town
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" /> ~30–40 min delivery
-            </span>
+            {restaurant?.address && (
+              <span className="flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" /> {restaurant.address}
+              </span>
+            )}
+            {restaurant && (
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" /> Delivery ${Number(restaurant.deliveryFee).toFixed(2)}
+                {Number(restaurant.minOrderAmount) > 0 && ` · min order $${Number(restaurant.minOrderAmount).toFixed(2)}`}
+              </span>
+            )}
           </div>
         </div>
       </section>
@@ -111,39 +134,39 @@ export default function LandingPage() {
       )}
 
       {filteredCategories && filteredCategories.length > 0 && (
-        <>
-          <div className="container">
+        <div className="container md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8 lg:grid-cols-[14rem_minmax(0,1fr)] md:pt-4">
+          <CategorySidebar categories={filteredCategories.map((c) => ({ id: c.id, name: c.name, count: c.menuItems.length }))} />
+          <div className="min-w-0">
             <CategoryChips categories={filteredCategories.map((c) => ({ id: c.id, name: c.name }))} />
-          </div>
 
-          <div className="container flex flex-col gap-8 py-2">
-            {filteredCategories.map((cat) => (
-              <section key={cat.id} id={`category-${cat.id}`} className="scroll-mt-32">
-                <h2 className="mb-1 text-lg font-semibold">
-                  {cat.name} <span className="text-sm font-normal text-muted-foreground">({cat.menuItems.length})</span>
-                </h2>
-                <div>
-                  {cat.menuItems.map((item, i) => (
-                    <MenuItemRow
-                      key={item.id}
-                      isLast={i === cat.menuItems.length - 1}
-                      onOpenDetail={() => setDetailItem(item)}
-                      item={{
-                        id: item.id,
-                        name: item.name,
-                        description: item.description,
-                        price: Number(item.price),
-                        isVeg: item.isVeg,
-                        imageUrl: item.imageUrl,
-                        hasModifiers: item.modifierGroups.length > 0,
-                      }}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
+            <div className="flex flex-col gap-8 py-2 md:gap-10">
+              {filteredCategories.map((cat) => (
+                <section key={cat.id} id={`category-${cat.id}`} className="scroll-mt-32">
+                  <h2 className="mb-1 text-lg font-semibold md:mb-4 md:text-xl">
+                    {cat.name} <span className="text-sm font-normal text-muted-foreground">({cat.menuItems.length})</span>
+                  </h2>
+                  <div className="md:grid md:grid-cols-2 md:gap-5 xl:grid-cols-3">
+                    {cat.menuItems.map((item) => (
+                      <MenuItemRow
+                        key={item.id}
+                        onOpenDetail={() => setDetailItem(item)}
+                        item={{
+                          id: item.id,
+                          name: item.name,
+                          description: item.description,
+                          price: Number(item.price),
+                          isVeg: item.isVeg,
+                          imageUrl: item.imageUrl,
+                          hasModifiers: item.modifierGroups.length > 0,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
           </div>
-        </>
+        </div>
       )}
 
       {categories && filteredCategories && filteredCategories.length === 0 && (

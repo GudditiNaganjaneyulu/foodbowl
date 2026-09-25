@@ -45,3 +45,17 @@ export const addressSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 export type AddressInput = z.infer<typeof addressSchema>;
+
+export const updateAddressSchema = addressSchema.partial().refine((v) => Object.keys(v).length > 0, {
+  message: 'Nothing to update',
+});
+export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;
+
+export const updateProfileSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    phone: z.string().min(7).max(20).nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

@@ -29,3 +29,4 @@ pnpm-debug.log*
 
 # turbo
 .turbo/
+apps/api/uploads/

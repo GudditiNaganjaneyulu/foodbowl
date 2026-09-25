@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { AccountMenu } from './account-menu';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 
 const NAV_LINKS = [
   { href: '/', label: 'Menu' },
@@ -47,6 +48,7 @@ export function StorefrontHeader() {
         </nav>
 
         <div className="flex items-center gap-1.5">
+          <NotificationBell />
           <ThemeToggle />
 
           <Button variant="ghost" size="icon" className="relative hidden md:inline-flex" asChild>

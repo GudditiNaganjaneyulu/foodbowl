@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { AddressBook } from '@/components/address/address-book';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { dashboardHomeFor } from '@/lib/dashboard-routes';
@@ -94,11 +95,9 @@ export default function ProfilePage() {
         </CardFooter>
       </Card>
 
-      <ChangePasswordCard />
+      <AddressBook />
 
-      <p className="text-center text-xs text-muted-foreground">
-        Saved addresses and other profile editing land alongside the Orders module.
-      </p>
+      <ChangePasswordCard />
     </div>
   );
 }

@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import Image from 'next/image';
 import { Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
+import { FoodImage } from './food-image';
 import { VegIndicator } from './veg-indicator';
 import { cn } from '@/lib/utils';
 import { useCart, type SelectedModifier } from '@/lib/cart-context';
@@ -27,11 +28,13 @@ export function ItemDetailSheet({ item, open, onOpenChange }: ItemDetailSheetPro
   const { addItem } = useCart();
   const [selections, setSelections] = React.useState<Record<string, Set<string>>>({});
   const [quantity, setQuantity] = React.useState(1);
+  const [note, setNote] = React.useState('');
 
   React.useEffect(() => {
     if (item) {
       setSelections({});
       setQuantity(1);
+      setNote('');
     }
   }, [item]);
 
@@ -56,14 +59,16 @@ export function ItemDetailSheet({ item, open, onOpenChange }: ItemDetailSheetPro
   const selectedModifiers: SelectedModifier[] = item.modifierGroups.flatMap((group) =>
     group.modifiers
       .filter((m) => selections[group.id]?.has(m.id))
-      .map((m) => ({ id: m.id, name: m.name, priceDelta: Number(m.priceDelta) })),
+      .map((m) => ({ id: m.id, groupId: group.id, name: m.name, priceDelta: Number(m.priceDelta) })),
   );
 
   const unitPrice = basePrice + selectedModifiers.reduce((sum, m) => sum + m.priceDelta, 0);
   const totalPrice = unitPrice * quantity;
 
+  // Mirrors the server's rule: a required group always needs at least one
+  // choice, even if its minSelect was left at 0.
   const missingRequired = item.modifierGroups.filter(
-    (g) => g.required && (selections[g.id]?.size ?? 0) < g.minSelect,
+    (g) => (selections[g.id]?.size ?? 0) < (g.required ? Math.max(g.minSelect, 1) : g.minSelect),
   );
   const canAdd = missingRequired.length === 0;
 
@@ -75,7 +80,9 @@ export function ItemDetailSheet({ item, open, onOpenChange }: ItemDetailSheetPro
         name: item.name,
         price: unitPrice,
         isVeg: item.isVeg,
+        imageUrl: item.imageUrl,
         modifiers: selectedModifiers.length > 0 ? selectedModifiers : undefined,
+        note: note.trim() || undefined,
       },
       quantity,
     );
@@ -86,9 +93,7 @@ export function ItemDetailSheet({ item, open, onOpenChange }: ItemDetailSheetPro
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl p-0 sm:max-w-lg sm:mx-auto">
         {item.imageUrl && (
-          <div className="relative h-48 w-full bg-muted">
-            <Image src={item.imageUrl} alt={item.name} fill sizes="512px" className="object-cover" />
-          </div>
+          <FoodImage src={item.imageUrl} alt={item.name} placeholder={false} className="aspect-[4/3] max-h-72 w-full sm:rounded-t-2xl" />
         )}
         <div className="flex flex-col gap-4 p-5 pb-28">
           <SheetHeader className="text-left">
@@ -163,6 +168,21 @@ export function ItemDetailSheet({ item, open, onOpenChange }: ItemDetailSheetPro
               )}
             </div>
           ))}
+
+          <div>
+            <Separator className="mb-4" />
+            <label htmlFor="item-note" className="mb-2 block font-medium">
+              Special instructions <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+            </label>
+            <Textarea
+              id="item-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={300}
+              placeholder="e.g. no onions, extra crispy, sauce on the side"
+            />
+            <p className="mt-1 text-right text-xs text-muted-foreground">{note.length}/300 · The restaurant is told, but can't always accommodate.</p>
+          </div>
         </div>
 
         <div className="fixed inset-x-0 bottom-0 flex items-center gap-3 border-t border-border bg-background p-4 pb-safe sm:mx-auto sm:max-w-lg sm:rounded-b-2xl">

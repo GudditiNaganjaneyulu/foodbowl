@@ -1,7 +1,8 @@
 import argon2 from 'argon2';
-import type { ChangePasswordInput } from '@foodbowl/shared';
+import type { ChangePasswordInput, UpdateProfileInput } from '@foodbowl/shared';
 import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
+import { getEffectivePermissions } from '../../lib/rbac';
 
 export class ProfileError extends Error {
   constructor(
@@ -36,4 +37,24 @@ export async function changePassword(userId: string, input: ChangePasswordInput)
   ]);
 
   logger.info({ userId }, 'user changed their own password');
+}
+
+export async function getMe(userId: string) {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, phone: true, role: { select: { key: true } } },
+  });
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    phone: user.phone,
+    role: user.role.key,
+    permissions: [...(await getEffectivePermissions(userId))],
+  };
+}
+
+export async function updateMe(userId: string, input: UpdateProfileInput) {
+  await prisma.user.update({ where: { id: userId }, data: input });
+  return getMe(userId);
 }

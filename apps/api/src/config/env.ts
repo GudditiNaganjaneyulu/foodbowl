@@ -15,6 +15,16 @@ import { z } from 'zod';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../');
 dotenv.config({ path: path.join(repoRoot, '.env') });
 
+/**
+ * `z.coerce.boolean()` is a trap for env vars: it is `Boolean(value)`, so the
+ * STRING "false" becomes `true`. Parse the words explicitly instead.
+ */
+const envBool = (fallback: boolean) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined || v.trim() === '' ? fallback : ['true', '1', 'yes'].includes(v.trim().toLowerCase())));
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(4000),
@@ -26,6 +36,11 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(16),
   ACCESS_TOKEN_TTL: z.string().default('15m'),
   REFRESH_TOKEN_TTL: z.string().default('7d'),
+
+  // Built-in file storage (used when Supabase isn't configured): where files are
+  // written, and this API's public address for building upload URLs behind a proxy.
+  UPLOAD_DIR: z.string().optional(),
+  PUBLIC_API_URL: z.string().url().optional().or(z.literal('').transform(() => undefined)),
 
   SUPABASE_URL: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
@@ -43,10 +58,13 @@ const envSchema = z.object({
   // 587 (STARTTLS) — see .env.example.
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().default(1025),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: envBool(false),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().default('orders@foodbowl.local'),
+  // Opt-in: real emails only go out when this is explicitly true, so a dev
+  // machine with live Brevo credentials in .env never mails seeded accounts.
+  EMAIL_NOTIFICATIONS_ENABLED: envBool(false),
 
   // @upstash/redis is an HTTP/REST client (works over fetch, no persistent
   // TCP socket — fine for a container, but specifically needs these REST

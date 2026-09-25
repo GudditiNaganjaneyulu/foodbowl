@@ -7,3 +7,6 @@ export * from './schemas/user.schema';
 export * from './schemas/menu.schema';
 export * from './schemas/cart.schema';
 export * from './schemas/order.schema';
+export * from './schemas/restaurant.schema';
+export * from './dto';
+export * from './schemas/upload.schema';

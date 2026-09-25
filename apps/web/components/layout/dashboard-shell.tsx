@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { AccountMenu } from './account-menu';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 
 export interface DashboardNavItem {
   href: string;
@@ -94,6 +95,7 @@ export function DashboardShell({ title, navItems, children }: DashboardShellProp
             <h1 className="text-lg font-semibold">{title}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <ThemeToggle />
             <AccountMenu />
           </div>

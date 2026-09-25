@@ -290,6 +290,8 @@ model OrderItem {
   quantity          Int
   selectedModifiers Json     @default("[]")
   lineTotal          Decimal  @db.Decimal(10, 2)
+  /// The customer's special instructions for this item ("no onions"), copied from the cart line.
+  note              String?
 
   @@index([orderId])
   @@map("order_items")

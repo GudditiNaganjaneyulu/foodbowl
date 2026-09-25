@@ -53,6 +53,9 @@ export const TRANSITION_REQUIREMENTS: Partial<
   },
 };
 
+/** Statuses in which a customer may still cancel their own order (before the kitchen starts). */
+export const CUSTOMER_CANCELLABLE_STATUSES: OrderStatus[] = [ORDER_STATUS.PLACED, ORDER_STATUS.CONFIRMED];
+
 export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
   return ORDER_TRANSITIONS[from].includes(to);
 }

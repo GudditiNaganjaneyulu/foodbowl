@@ -14,7 +14,7 @@ import { ApiError } from '@/lib/api-client';
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
-  const [form, setForm] = React.useState({ name: '', email: '', password: '' });
+  const [form, setForm] = React.useState({ name: '', email: '', password: '', phone: '' });
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -23,8 +23,9 @@ export default function RegisterPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await register(form);
-      router.push(nextPathFromLocation() ?? '/');
+      await register({ ...form, phone: form.phone.trim() || undefined });
+      // New customers land on their profile to add a phone number and address (skippable).
+      router.push(nextPathFromLocation() ?? '/profile?welcome=1');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -71,6 +72,21 @@ export default function RegisterPage() {
               minLength={8}
               value={form.password}
               onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="phone">
+              Phone number <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="phone"
+              type="tel"
+              inputMode="tel"
+              minLength={7}
+              maxLength={20}
+              placeholder="So delivery can reach you"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

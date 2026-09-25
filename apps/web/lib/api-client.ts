@@ -47,6 +47,9 @@ async function request<T>(
     res = await fetch(`${API_URL}${path}`, {
       ...init,
       credentials: 'include',
+      // Changes (add to cart, save note…) must still reach the server if the page is
+      // refreshed or closed a moment after the tap; keepalive lets them outlive it.
+      keepalive: init.method !== undefined && init.method !== 'GET',
       headers: {
         // Declaring JSON with no body makes the API answer 400 (empty JSON body).
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),

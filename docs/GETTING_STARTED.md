@@ -21,13 +21,16 @@ FoodBowl connects directly to a few external services rather than running everyt
 
 There's no local Postgres fallback wired up by default — `infra/docker-compose.yml` has a `postgres` service defined but commented out if you'd rather develop against a local DB (uncomment it, and set `DATABASE_URL` back to `postgresql://foodbowl:foodbowl@localhost:5432/foodbowl`).
 
-### Supabase Storage — optional (menu images, delivery proof photos, avatars)
+### Supabase Storage — recommended (dish photos, delivery proof photos, avatars)
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Go to **Project Settings → API** and copy the **Project URL** (`SUPABASE_URL`) and the **service_role** key (`SUPABASE_SERVICE_ROLE_KEY`) — not the `anon` key; the backend needs the elevated one, and it's never exposed to the frontend.
-3. Create the storage buckets referenced in `.env.example` (`menu-images`, `restaurant-assets`, `delivery-proofs`, `user-avatars`) from the Supabase dashboard's Storage section.
+2. **Project Settings → API**: copy the **Project URL** (`SUPABASE_URL`) and the **service_role** key (`SUPABASE_SERVICE_ROLE_KEY`) — not the `anon` key. The backend needs the elevated one and it is never sent to the browser.
+3. **Storage**: create four **public** buckets: `menu-images`, `restaurant-assets`, `delivery-proofs`, `user-avatars`.
+4. Put the two values in `.env`. The owner can now upload dish photos from **Admin → Menu**, and delivery partners take a proof-of-delivery photo with their phone camera — the browser uploads straight to the bucket using a short-lived signed URL, so image bytes never pass through the API.
 
-Without these set, image-upload features simply won't work yet — they're not built as of this writing anyway (see `.claude/progress.md`), so this can be deferred.
+**Demo photos are not in this repository.** The seed menu's ~24 dishes reference photos stored in the bucket at `menu-images/seed/<name>.jpg` (credits in [MENU_PHOTO_CREDITS.md](./MENU_PHOTO_CREDITS.md)). Running `pnpm db:seed` only *points* menu items at those URLs, and first checks each one exists — a missing photo just shows a placeholder. To use your own Supabase project, upload photos with those names to `menu-images/seed/` (the credits file links each original) or replace the photos from the Menu screen.
+
+**Without Supabase** the API falls back to *built-in storage* on its own disk (`UPLOAD_DIR`, default `apps/api/uploads/`), served at `/files/...`. Uploads and proof photos work out of the box; the seeded dish photos will not (there is nothing to point at), so those items show a placeholder. In Docker, mount a volume at `UPLOAD_DIR` or uploads are lost on redeploy.
 
 ### Brevo (SMTP) — optional (email notifications)
 
@@ -93,7 +96,9 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-This is idempotent — safe to re-run. It creates the restaurant, all RBAC roles/permissions, demo menu items, a couple of sample orders, and one account per role (see next section).
+This is idempotent — safe to re-run, and it adds to an existing database rather than duplicating (categories and dishes are matched by name). It creates the restaurant, all RBAC roles/permissions, a ~24-dish photo menu with customization options, a couple of sample orders, and one account per role (see next section).
+
+On an **existing deployment** you usually don't want demo data — after `pnpm db:deploy` just run `pnpm --filter @foodbowl/api db:sync-rbac`, which only brings roles/permissions up to date (needed whenever a release introduces a permission, such as `support.manage`).
 
 ## 6. Default logins
 
@@ -102,8 +107,9 @@ The seed script is the **only** bootstrap path — it creates one account per ro
 | Role | Email | Password | Dashboard | What it demonstrates |
 |---|---|---|---|---|
 | Restaurant owner ("super admin") | `owner@foodbowl.local` | `Password123!` | [localhost:3000/admin](http://localhost:3000/admin) | Full permissions by default — the only role that can hold `users.manage` / `restaurant.manage`. |
-| Staff — orders only | `staff.orders@foodbowl.local` | `Password123!` | [localhost:3000/staff](http://localhost:3000/staff) | The `staff` role's default baseline permission (`orders.view`) with nothing extra granted. |
+| Staff — kitchen | `staff.orders@foodbowl.local` | `Password123!` | [localhost:3000/staff](http://localhost:3000/staff) | The staff baseline (`orders.view`) plus `orders.manage` granted individually: can work the order queue but has no menu, delivery, or support access. |
 | Staff — menu + delivery | `staff.menu@foodbowl.local` | `Password123!` | [localhost:3000/staff](http://localhost:3000/staff) | Per-user permission **overrides** — this account has `menu.manage`, `delivery.assign`, and `orders.manage` granted individually on top of the staff baseline, demonstrating that permissions are per-employee, not just per-role. |
+| Staff — customer support | `staff.support@foodbowl.local` | `Password123!` | [localhost:3000/staff/support](http://localhost:3000/staff/support) | Baseline plus `support.manage`: can read, answer, assign and resolve customer conversations, and appears in the assignee list. |
 | Delivery partner | `delivery1@foodbowl.local`, `delivery2@foodbowl.local` | `Password123!` | [localhost:3000/delivery](http://localhost:3000/delivery) | The `delivery_partner` role's `delivery.fulfill` permission. |
 | Customer | `customer1@foodbowl.local`, `customer2@foodbowl.local`, `customer3@foodbowl.local` | `Password123!` | [localhost:3000](http://localhost:3000) | Public self-registration path — customers get no RBAC permissions; their access is scoped by resource ownership instead. |
 
@@ -131,7 +137,22 @@ Log in as the owner, go to **Users** in the sidebar (`/admin/users`):
 - **Deactivate** — immediately blocks login and revokes all active sessions for that user, without deleting their order/audit history.
 - **Delete** — only allowed for a user with zero order/delivery/audit history; otherwise the API rejects it and you should deactivate instead.
 
-## 7. Troubleshooting
+## 7. Running the tests
+
+Unit tests need nothing. Integration tests (cart → order → delivery → notifications → support → uploads → auth) write real users and orders, so they only run when `TEST_DATABASE_URL` points at a **throwaway** database — they refuse to touch your `.env` database. A disposable local Postgres is the easiest:
+
+```bash
+docker run -d --name fb-test-pg -e POSTGRES_USER=foodbowl -e POSTGRES_PASSWORD=foodbowl -e POSTGRES_DB=foodbowl -p 5433:5432 postgres:16-alpine
+export DATABASE_URL=postgresql://foodbowl:foodbowl@localhost:5433/foodbowl
+pnpm --filter @foodbowl/api exec prisma migrate deploy
+pnpm --filter @foodbowl/api db:seed          # the tests use the seeded menu and accounts
+
+TEST_DATABASE_URL=$DATABASE_URL pnpm --filter @foodbowl/api test
+```
+
+Each suite resets what it changes (restaurant open, fee, availability) and deletes what it creates, so it can be re-run any number of times. Redis, real email and Supabase are switched off for the run.
+
+## 8. Troubleshooting
 
 Real issues hit and fixed while building this — documented here in case they recur (e.g. after pulling upstream changes, or if you extend the Docker setup yourself):
 
@@ -140,4 +161,8 @@ Real issues hit and fixed while building this — documented here in case they r
 - **`api` container: `ERR_UNKNOWN_FILE_EXTENSION` on `tracing.ts`**: don't bootstrap OpenTelemetry via a `tsx --import ./path/to/file.ts` CLI flag under `tsx watch` — it runs the app in a worker thread and doesn't reliably apply its TypeScript loader to a flag-supplied file there. Import it as the literal first line of `server.ts` instead (already done — flagging in case this pattern gets reintroduced).
 - **`api` container: Prisma error `libssl.so.1.1: cannot open shared object file`**: `node:20-slim` ships no OpenSSL at all, so Prisma's runtime detection guesses wrong. Both Dockerfile stages that run Prisma (`base` and `prod`) need `RUN apt-get install -y openssl`.
 - **`/health/ready` returns `db: disconnected` right after starting**: almost certainly Neon's free-tier compute waking up from being idle (see the NeonDB section above), not a real failure — retry after a few seconds.
+- **Dish photos show a plain placeholder tile**: the menu items have no `imageUrl`, or it points somewhere unreachable. Re-run `pnpm db:seed` with Supabase configured (it links each dish to `menu-images/seed/<name>.jpg` if that file exists in your bucket — the seed logs a warning for any it can't find), or set a photo from **Admin → Menu**.
+- **Photo upload says "isn't set up on this server"** (HTTP 503 from `POST /api/v1/uploads/sign`): storage was disabled. With no Supabase configured the API uses its built-in disk storage; a 503 means neither is available.
+- **Staff can't see the Support screen / it says "You don't have access"**: they need the `support.manage` permission — the owner grants it from **Admin → Users** (or use `staff.support@foodbowl.local`). On a database from before the support feature, run `pnpm --filter @foodbowl/api db:sync-rbac` so the permission exists.
+- **Everyone was signed out after upgrading**: expected once. Refresh tokens are now looked up by an ID instead of being scanned (the old scan made each refresh slower for every login a user had ever made); tokens issued before that change are no longer valid, so people simply sign in again.
 - **Nothing crashes, but rate limiting/menu caching don't seem to do anything**: check the boot log for `UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN not set` — this is expected/by-design when Redis isn't configured (see the Upstash section above), not an error.

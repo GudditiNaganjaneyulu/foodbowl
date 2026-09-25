@@ -14,6 +14,7 @@ import { addressLine, formatDateTime } from '@/lib/format';
 import { KITCHEN_NEXT, RESTAURANT_CAN_CANCEL, useOrderActions } from '@/lib/use-order-actions';
 import { useSocketEvent } from '@/lib/socket';
 import { OrderItems } from './order-items';
+import { ProofOfDelivery } from './proof-of-delivery';
 import { OrderStatusBadge } from './order-status-badge';
 import { StatusTimeline } from './status-timeline';
 
@@ -143,6 +144,16 @@ export function OrderDetailSheet({
               <section>
                 <h3 className="mb-2 text-sm font-semibold">Delivery</h3>
                 <AssignRider order={current} onChanged={handleChanged} />
+                {current.delivery?.status === 'DELIVERED' && (
+                  <div className="mt-3 flex items-center gap-3 text-sm" data-testid="delivery-proof">
+                    <ProofOfDelivery url={current.delivery.proofImageUrl} orderNumber={current.orderNumber} />
+                    <p className="text-muted-foreground">
+                      Delivered {current.delivery.deliveredAt ? formatDateTime(current.delivery.deliveredAt) : ''}
+                      {current.delivery.codCollected ? ` · cash collected (${'$' + current.total})` : ''}
+                      {!current.delivery.proofImageUrl && <span className="block text-xs">No photo was taken.</span>}
+                    </p>
+                  </div>
+                )}
               </section>
             </>
           )}

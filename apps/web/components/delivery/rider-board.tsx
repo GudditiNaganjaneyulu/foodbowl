@@ -4,6 +4,8 @@ import * as React from 'react';
 import { CheckCircle2, MapPin, Navigation, Package, Phone, Radio, StickyNote } from 'lucide-react';
 import { REALTIME, type DeliveryAssignmentWithOrderDTO, type OrderDTO } from '@foodbowl/shared';
 import { OrderStatusBadge } from '@/components/orders/order-status-badge';
+import { ProofOfDelivery } from '@/components/orders/proof-of-delivery';
+import { FoodImage } from '@/components/menu/food-image';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toaster';
 import { apiClient, ApiError } from '@/lib/api-client';
+import { assetUrl } from '@/lib/asset-url';
 import { addressLine, formatDateTime, money } from '@/lib/format';
 import { useSocket, useSocketEvent } from '@/lib/socket';
 
@@ -164,6 +167,7 @@ export function RiderBoard({ scope }: { scope: 'active' | 'history' }) {
                   <p className="text-xs text-muted-foreground">{formatDateTime(a.deliveredAt ?? a.assignedAt)}</p>
                 </div>
                 <div className="flex items-center gap-3">
+                  {a.proofImageUrl && <ProofOfDelivery url={a.proofImageUrl} orderNumber={a.order.orderNumber} className="[&_img]:h-10 [&_img]:w-10 [&>span]:hidden" />}
                   <span className="tabular-nums">{money(a.order.total)}</span>
                   {a.order.status === 'CANCELLED' ? <OrderStatusBadge status="CANCELLED" /> : <Badge variant={a.status === 'DELIVERED' ? 'success' : 'outline'}>{a.status.toLowerCase().replace('_', ' ')}</Badge>}
                 </div>
@@ -210,11 +214,15 @@ function Summary({ a, detailed = false }: { a: DeliveryAssignmentWithOrderDTO; d
               </a>
             )}
           </p>
-          <ul className="text-muted-foreground">
+          <ul className="flex flex-col gap-1.5">
             {o.items.map((i) => (
-              <li key={i.id}>
-                {i.quantity} × {i.name}
-                {i.modifiers.length > 0 && <span className="text-xs"> ({i.modifiers.map((m) => m.name).join(', ')})</span>}
+              <li key={i.id} className="flex items-start gap-2">
+                <FoodImage src={i.imageUrl} alt={i.name} className="h-9 w-9 shrink-0 rounded" />
+                <span className="text-muted-foreground">
+                  <span className="font-medium text-foreground">{i.quantity} × {i.name}</span>
+                  {i.modifiers.length > 0 && <span className="text-xs"> ({i.modifiers.map((m) => m.name).join(', ')})</span>}
+                  {i.note && <span className="block text-xs italic">“{i.note}”</span>}
+                </span>
               </li>
             ))}
           </ul>
@@ -314,15 +322,22 @@ function CompleteDialog({ assignment, onClose, onDone }: { assignment: DeliveryA
             I collected <strong>{assignment ? money(assignment.order.total) : ''}</strong> in cash from the customer.
           </span>
         </label>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2" data-testid="proof-section">
           <p className="text-sm font-medium">
-            Proof photo <span className="font-normal text-muted-foreground">(optional)</span>
+            Photo of the delivered order <span className="font-normal text-muted-foreground">(recommended)</span>
           </p>
-          {proofUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={proofUrl} alt="Delivery proof" className="h-32 w-32 rounded-md object-cover" />
-          ) : (
-            assignment && <ImageUploader bucket="delivery-proofs" entityId={assignment.order.id} onUploaded={setProofUrl} label="Add a photo" />
+          <p className="text-xs text-muted-foreground">Take a picture of the food at the door. It's shown to the customer and the restaurant as proof of delivery.</p>
+          {proofUrl && (
+            <div className="flex items-end gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={assetUrl(proofUrl) ?? ''} alt="Delivery proof preview" className="h-32 w-32 rounded-md object-cover" data-testid="proof-preview" />
+              <Button type="button" variant="ghost" size="sm" onClick={() => setProofUrl(null)}>
+                Retake
+              </Button>
+            </div>
+          )}
+          {!proofUrl && assignment && (
+            <ImageUploader bucket="delivery-proofs" entityId={assignment.order.id} onUploaded={setProofUrl} label="Take a photo" capture="environment" />
           )}
         </div>
         <DialogFooter>

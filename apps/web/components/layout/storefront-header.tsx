@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingCart, UtensilsCrossed } from 'lucide-react';
+import { LifeBuoy, ShoppingCart, UtensilsCrossed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +48,13 @@ export function StorefrontHeader() {
         </nav>
 
         <div className="flex items-center gap-1.5">
+          {user && (
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/support" aria-label="Help and support" data-testid="help-link">
+                <LifeBuoy className="h-[1.15rem] w-[1.15rem]" />
+              </Link>
+            </Button>
+          )}
           <NotificationBell />
           <ThemeToggle />
 

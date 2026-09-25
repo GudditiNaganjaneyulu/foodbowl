@@ -15,6 +15,8 @@ export interface DashboardNavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** A small count shown beside the label (e.g. unread support conversations). */
+  badge?: number;
 }
 
 interface DashboardShellProps {
@@ -28,7 +30,9 @@ function NavList({ navItems, onNavigate }: { navItems: DashboardNavItem[]; onNav
   return (
     <nav className="flex flex-col gap-1">
       {navItems.map((item) => {
-        const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+        // A root entry like /admin owns only that exact page; otherwise it would light up on every /admin/* screen.
+        const isRoot = navItems.some((other) => other.href !== item.href && other.href.startsWith(`${item.href}/`));
+        const active = pathname === item.href || (!isRoot && pathname?.startsWith(`${item.href}/`));
         const Icon = item.icon;
         return (
           <Link
@@ -43,7 +47,12 @@ function NavList({ navItems, onNavigate }: { navItems: DashboardNavItem[]; onNav
             )}
           >
             <Icon className="h-4 w-4" />
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            {item.badge ? (
+              <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground" aria-label={`${item.badge} unread`}>
+                {item.badge}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -74,7 +83,7 @@ export function DashboardShell({ title, navItems, children }: DashboardShellProp
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
           <div className="flex items-center gap-3">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -101,7 +110,7 @@ export function DashboardShell({ title, navItems, children }: DashboardShellProp
           </div>
         </header>
 
-        <main className="flex-1 bg-muted/30 p-4 md:p-6">{children}</main>
+        <main className="min-w-0 flex-1 bg-muted/30 p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

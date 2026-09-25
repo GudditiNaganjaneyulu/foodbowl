@@ -3,10 +3,11 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, MapPin, Phone, Radio } from 'lucide-react';
+import { ArrowLeft, LifeBuoy, MapPin, Phone, Radio } from 'lucide-react';
 import { CUSTOMER_CANCELLABLE_STATUSES, type OrderDTO } from '@foodbowl/shared';
 import { OrderItems } from '@/components/orders/order-items';
 import { OrderStatusBadge } from '@/components/orders/order-status-badge';
+import { ProofOfDelivery } from '@/components/orders/proof-of-delivery';
 import { StatusTimeline } from '@/components/orders/status-timeline';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,6 +106,20 @@ export default function OrderTrackingPage() {
         </Card>
       )}
 
+      {order.delivery?.proofImageUrl && (
+        <Card data-testid="proof-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Proof of delivery</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center gap-4 text-sm">
+            <ProofOfDelivery url={order.delivery.proofImageUrl} orderNumber={order.orderNumber} className="[&_img]:h-28 [&_img]:w-28" />
+            <p className="text-muted-foreground">
+              {order.delivery.deliveryPartner.name} took this photo when your order arrived. Tap it to see it full size.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Your order</CardTitle>
@@ -121,6 +136,12 @@ export default function OrderTrackingPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Button variant="outline" className="w-full" asChild data-testid="order-help">
+        <Link href={`/support/new?order=${order.id}`}>
+          <LifeBuoy className="h-4 w-4" /> Need help with this order?
+        </Link>
+      </Button>
 
       {canCancel && <CancelOrder order={order} onCancelled={setOrder} />}
       {!canCancel && active && order.customer.id === user.id && (

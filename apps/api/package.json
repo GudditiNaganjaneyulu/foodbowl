@@ -14,6 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:sync-rbac": "tsx prisma/sync-rbac.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { FoodImage } from '@/components/menu/food-image';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ImageUploader } from '@/components/ui/image-uploader';
@@ -189,9 +190,17 @@ export function ItemDialog({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="item-image">Photo URL</Label>
             <div className="flex items-start gap-2">
-              <Input id="item-image" type="url" placeholder="https://…" value={form.imageUrl} onChange={set('imageUrl')} />
+              <Input id="item-image" placeholder="https://…  (or upload)" value={form.imageUrl} onChange={set('imageUrl')} />
               <ImageUploader bucket="menu-images" entityId={item?.id} onUploaded={(url) => setForm((f) => ({ ...f, imageUrl: url }))} label="Upload" />
             </div>
+            {form.imageUrl && (
+              <div className="flex items-center gap-3">
+                <FoodImage src={form.imageUrl} alt="Preview" className="h-20 w-28 rounded-lg" />
+                <Button type="button" variant="ghost" size="sm" onClick={() => setForm((f) => ({ ...f, imageUrl: '' }))}>
+                  Remove photo
+                </Button>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-6 text-sm">
             <label className="flex items-center gap-2">

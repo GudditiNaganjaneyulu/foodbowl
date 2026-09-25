@@ -11,18 +11,18 @@ datasource db {
 // ── RBAC ──────────────────────────────────────────────────────────────────
 
 model Role {
-  id             String           @id @default(cuid())
-  key            String           @unique // customer | restaurant_owner | delivery_partner | staff
-  name           String
-  users          User[]
+  id              String           @id @default(cuid())
+  key             String           @unique // customer | restaurant_owner | delivery_partner | staff
+  name            String
+  users           User[]
   rolePermissions RolePermission[]
 
   @@map("roles")
 }
 
 model Permission {
-  id              String            @id @default(cuid())
-  key             String            @unique // e.g. "orders.manage"
+  id              String           @id @default(cuid())
+  key             String           @unique // e.g. "orders.manage"
   description     String?
   rolePermissions RolePermission[]
   userPermissions UserPermission[]
@@ -66,16 +66,19 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  userPermissions UserPermission[]
-  refreshTokens   RefreshToken[]
-  addresses       Address[]
-  cart            Cart?
-  orders          Order[]              @relation("CustomerOrders")
-  statusChanges   OrderStatusLog[]     @relation("StatusChangedBy")
+  userPermissions     UserPermission[]
+  refreshTokens       RefreshToken[]
+  addresses           Address[]
+  cart                Cart?
+  orders              Order[]              @relation("CustomerOrders")
+  statusChanges       OrderStatusLog[]     @relation("StatusChangedBy")
   assignmentsGiven    DeliveryAssignment[] @relation("AssignedBy")
   assignmentsReceived DeliveryAssignment[] @relation("DeliveryPartner")
-  notifications   Notification[]
-  auditLogs       AuditLog[]           @relation("AuditActor")
+  notifications       Notification[]
+  auditLogs           AuditLog[]           @relation("AuditActor")
+  supportTickets      SupportTicket[]      @relation("SupportRequester")
+  assignedTickets     SupportTicket[]      @relation("SupportAssignee")
+  supportMessages     SupportMessage[]
 
   @@index([roleId])
   @@map("users")
@@ -118,19 +121,19 @@ model Address {
 // ── Restaurant / Menu ─────────────────────────────────────────────────────
 
 model Restaurant {
-  id              String   @id @default(cuid())
-  name            String
-  description     String?
-  logoUrl         String?
-  address         String?
-  phone           String?
-  isOpen          Boolean  @default(true)
-  opensAt         String? // "10:00"
-  closesAt        String? // "22:30"
-  minOrderAmount  Decimal  @default(0) @db.Decimal(10, 2)
-  deliveryFee     Decimal  @default(0) @db.Decimal(10, 2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  logoUrl        String?
+  address        String?
+  phone          String?
+  isOpen         Boolean  @default(true)
+  opensAt        String? // "10:00"
+  closesAt       String? // "22:30"
+  minOrderAmount Decimal  @default(0) @db.Decimal(10, 2)
+  deliveryFee    Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   categories Category[]
 
@@ -138,12 +141,12 @@ model Restaurant {
 }
 
 model Category {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   name         String
-  sortOrder    Int      @default(0)
-  isActive     Boolean  @default(true)
+  sortOrder    Int        @default(0)
+  isActive     Boolean    @default(true)
 
   menuItems MenuItem[]
 
@@ -249,30 +252,31 @@ enum PaymentStatus {
 }
 
 model Order {
-  id           String        @id @default(cuid())
-  orderNumber  String        @unique
-  userId       String
-  user         User          @relation("CustomerOrders", fields: [userId], references: [id])
-  addressId    String
-  address      Address       @relation(fields: [addressId], references: [id])
-  status       OrderStatus   @default(PLACED)
-  subtotal     Decimal       @db.Decimal(10, 2)
-  deliveryFee  Decimal       @db.Decimal(10, 2)
-  discount     Decimal       @default(0) @db.Decimal(10, 2)
-  total        Decimal       @db.Decimal(10, 2)
-  paymentMethod PaymentMethod @default(COD)
-  paymentStatus PaymentStatus @default(PENDING)
-  placedAt     DateTime      @default(now())
-  deliveredAt  DateTime?
-  cancelledAt  DateTime?
+  id                 String        @id @default(cuid())
+  orderNumber        String        @unique
+  userId             String
+  user               User          @relation("CustomerOrders", fields: [userId], references: [id])
+  addressId          String
+  address            Address       @relation(fields: [addressId], references: [id])
+  status             OrderStatus   @default(PLACED)
+  subtotal           Decimal       @db.Decimal(10, 2)
+  deliveryFee        Decimal       @db.Decimal(10, 2)
+  discount           Decimal       @default(0) @db.Decimal(10, 2)
+  total              Decimal       @db.Decimal(10, 2)
+  paymentMethod      PaymentMethod @default(COD)
+  paymentStatus      PaymentStatus @default(PENDING)
+  placedAt           DateTime      @default(now())
+  deliveredAt        DateTime?
+  cancelledAt        DateTime?
   cancellationReason String?
-  notes        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   items              OrderItem[]
   statusLogs         OrderStatusLog[]
   deliveryAssignment DeliveryAssignment?
+  supportTickets     SupportTicket[]
 
   @@index([userId])
   @@index([status])
@@ -285,11 +289,11 @@ model OrderItem {
   order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItemId        String
   menuItem          MenuItem @relation(fields: [menuItemId], references: [id])
-  nameSnapshot       String
-  priceSnapshot       Decimal  @db.Decimal(10, 2)
+  nameSnapshot      String
+  priceSnapshot     Decimal  @db.Decimal(10, 2)
   quantity          Int
   selectedModifiers Json     @default("[]")
-  lineTotal          Decimal  @db.Decimal(10, 2)
+  lineTotal         Decimal  @db.Decimal(10, 2)
   /// The customer's special instructions for this item ("no onions"), copied from the cart line.
   note              String?
 
@@ -298,15 +302,15 @@ model OrderItem {
 }
 
 model OrderStatusLog {
-  id            String      @id @default(cuid())
-  orderId       String
-  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  fromStatus    OrderStatus?
-  toStatus      OrderStatus
+  id              String       @id @default(cuid())
+  orderId         String
+  order           Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus      OrderStatus?
+  toStatus        OrderStatus
   changedByUserId String
-  changedBy     User        @relation("StatusChangedBy", fields: [changedByUserId], references: [id])
-  note          String?
-  createdAt     DateTime    @default(now())
+  changedBy       User         @relation("StatusChangedBy", fields: [changedByUserId], references: [id])
+  note            String?
+  createdAt       DateTime     @default(now())
 
   @@index([orderId])
   @@map("order_status_logs")
@@ -323,21 +327,21 @@ enum DeliveryAssignmentStatus {
 }
 
 model DeliveryAssignment {
-  id                 String                   @id @default(cuid())
-  orderId            String                   @unique
-  order              Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  deliveryPartnerId  String
-  deliveryPartner    User                     @relation("DeliveryPartner", fields: [deliveryPartnerId], references: [id])
-  assignedByUserId   String
-  assignedBy         User                     @relation("AssignedBy", fields: [assignedByUserId], references: [id])
-  status             DeliveryAssignmentStatus @default(OFFERED)
-  assignedAt         DateTime                 @default(now())
-  acceptedAt         DateTime?
-  pickedUpAt         DateTime?
-  deliveredAt        DateTime?
-  proofImageUrl      String?
-  codCollected       Boolean                  @default(false)
-  codCollectedAt     DateTime?
+  id                String                   @id @default(cuid())
+  orderId           String                   @unique
+  order             Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deliveryPartnerId String
+  deliveryPartner   User                     @relation("DeliveryPartner", fields: [deliveryPartnerId], references: [id])
+  assignedByUserId  String
+  assignedBy        User                     @relation("AssignedBy", fields: [assignedByUserId], references: [id])
+  status            DeliveryAssignmentStatus @default(OFFERED)
+  assignedAt        DateTime                 @default(now())
+  acceptedAt        DateTime?
+  pickedUpAt        DateTime?
+  deliveredAt       DateTime?
+  proofImageUrl     String?
+  codCollected      Boolean                  @default(false)
+  codCollectedAt    DateTime?
 
   @@index([deliveryPartnerId])
   @@map("delivery_assignments")
@@ -380,4 +384,73 @@ model AuditLog {
   @@index([actorUserId])
   @@index([entityType, entityId])
   @@map("audit_logs")
+}
+
+// ── Customer support ───────────────────────────────────────────────────────
+
+/// OPEN = waiting on the restaurant, PENDING = waiting on the customer, RESOLVED = done.
+enum SupportStatus {
+  OPEN
+  PENDING
+  RESOLVED
+}
+
+enum SupportCategory {
+  ORDER
+  DELIVERY
+  PAYMENT
+  MENU
+  ACCOUNT
+  OTHER
+}
+
+enum SupportMessageKind {
+  TEXT
+  SYSTEM
+}
+
+model SupportTicket {
+  id              String          @id @default(cuid())
+  number          String          @unique
+  subject         String
+  category        SupportCategory @default(OTHER)
+  status          SupportStatus   @default(OPEN)
+  requesterId     String
+  requester       User            @relation("SupportRequester", fields: [requesterId], references: [id])
+  orderId         String?
+  order           Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  assignedToId    String?
+  assignedTo      User?           @relation("SupportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  /// Time of the latest customer-visible message; drives list ordering.
+  lastMessageAt   DateTime        @default(now())
+  /// When the requester last opened it. Unread for them = staff replied after this.
+  requesterReadAt DateTime        @default(now())
+  /// When any member of staff last opened it (shared across the team). Null = never.
+  staffReadAt     DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  messages SupportMessage[]
+
+  @@index([requesterId])
+  @@index([status, lastMessageAt])
+  @@index([assignedToId])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id         String             @id @default(cuid())
+  ticketId   String
+  ticket     SupportTicket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId   String?
+  sender     User?              @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  kind       SupportMessageKind @default(TEXT)
+  body       String
+  /// Staff-only notes and events; never sent to the customer.
+  isInternal Boolean            @default(false)
+  createdAt  DateTime           @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("support_messages")
 }

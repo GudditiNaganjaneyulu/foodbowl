@@ -12,6 +12,7 @@ export const ACCOUNTS = {
   owner: 'owner@foodbowl.local',
   staffOrders: 'staff.orders@foodbowl.local',
   staffMenu: 'staff.menu@foodbowl.local',
+  staffSupport: 'staff.support@foodbowl.local',
   delivery1: 'delivery1@foodbowl.local',
   delivery2: 'delivery2@foodbowl.local',
   customer1: 'customer1@foodbowl.local',

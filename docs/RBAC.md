@@ -23,8 +23,13 @@ Source of truth for roles/permissions is code, not this doc: `packages/shared/sr
 | `reports.view` | View revenue/order reports |
 | `restaurant.manage` | Edit restaurant settings (hours, delivery fee, open/closed) — **owner only** |
 | `users.manage` | Add/deactivate users, assign roles, grant/revoke staff permissions — **owner only** |
+| `support.manage` | See, answer, assign and resolve customer support conversations. The owner has it by default; grant it to staff per person (the seeded `staff.support@foodbowl.local` has it). Holders appear in the assignee list. |
 
 `restaurant.manage` and `users.manage` are in `OWNER_ONLY_PERMISSIONS` and can never be granted to a `staff` account via the per-user override UI, even by an owner — the API rejects it server-side.
+
+## Adding a permission
+
+Add it to `packages/shared/src/constants/permissions.ts`, then make the database match with **`pnpm db:sync-rbac`** (idempotent and additive: it only creates missing roles/permissions/defaults and never touches per-user grants). Deployments should run it right after `prisma migrate deploy` — that is how an existing production database learns about a permission introduced by a new release, without loading any demo data.
 
 ## How effective permissions are computed
 
@@ -38,4 +43,4 @@ Routes call `requirePermission(PERMISSIONS.X)` (or `requireRole(...)` for the ra
 
 ## User management
 
-See BUILD_PROMPT.md §3.4. All user creation/deactivation/role/permission changes happen through `/api/v1/admin/users*`, gated on `users.manage`, exercised from the Owner Dashboard's Users screen (`apps/web/app/(admin)/users/page.tsx`). Every action writes an `AuditLog` row.
+See BUILD_PROMPT.md §3.4. All user creation/deactivation/role/permission changes happen through `/api/v1/admin/users*`, gated on `users.manage`, exercised from the Owner Dashboard's Users screen (`apps/web/app/admin/users/page.tsx`). Every action writes an `AuditLog` row.

@@ -12,13 +12,16 @@ import { addressLine } from '@/lib/format';
 import { AddressForm } from './address-form';
 
 /** Manage saved delivery addresses: add, edit, make default, delete. */
-export function AddressBook() {
+export function AddressBook({ onLoaded }: { onLoaded?: (addresses: AddressDTO[]) => void }) {
   const { toast } = useToast();
   const [addresses, setAddresses] = React.useState<AddressDTO[] | null>(null);
   const [editing, setEditing] = React.useState<AddressDTO | 'new' | null>(null);
 
   const load = React.useCallback(async () => {
-    setAddresses(await apiClient.get<AddressDTO[]>('/api/v1/users/me/addresses').catch(() => []));
+    const list = await apiClient.get<AddressDTO[]>('/api/v1/users/me/addresses').catch(() => []);
+    setAddresses(list);
+    onLoaded?.(list);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   React.useEffect(() => {
     void load();

@@ -8,6 +8,7 @@ import {
   ROLES,
   PERMISSIONS,
 } from '@foodbowl/shared';
+import { syncRbac } from './rbac';
 import { getStorage, usingSupabase } from '../src/lib/storage';
 import { resolveStoragePath, uploadRoot } from '../src/lib/storage/local';
 
@@ -85,36 +86,7 @@ const multi = (name: string, options: [string, number][], maxSelect = options.le
 
 async function main() {
   console.log('Seeding roles + permissions...');
-  const roles = new Map<string, string>();
-  for (const key of ALL_ROLES) {
-    const role = await prisma.role.upsert({
-      where: { key },
-      update: {},
-      create: { key, name: key.replace(/_/g, ' ') },
-    });
-    roles.set(key, role.id);
-  }
-
-  const permissions = new Map<string, string>();
-  for (const key of ALL_PERMISSIONS) {
-    const permission = await prisma.permission.upsert({
-      where: { key },
-      update: {},
-      create: { key, description: key },
-    });
-    permissions.set(key, permission.id);
-  }
-
-  for (const [roleKey, permissionKeys] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-    const roleId = roles.get(roleKey)!;
-    for (const permissionKey of permissionKeys) {
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId, permissionId: permissions.get(permissionKey)! } },
-        update: {},
-        create: { roleId, permissionId: permissions.get(permissionKey)! },
-      });
-    }
-  }
+  const { roles, permissions } = await syncRbac(prisma);
 
   console.log('Seeding restaurant...');
   const restaurant = await prisma.restaurant.upsert({
@@ -187,6 +159,25 @@ async function main() {
       create: { userId: staffMenuAndDelivery.id, permissionId: permissions.get(permKey)!, granted: true },
     });
   }
+
+  // A dedicated customer-support agent: the staff baseline plus support.manage.
+  const staffSupport = await prisma.user.upsert({
+    where: { email: 'staff.support@foodbowl.local' },
+    update: {},
+    create: {
+      email: 'staff.support@foodbowl.local',
+      name: 'Staff Sam (customer support)',
+      passwordHash,
+      roleId: roles.get(ROLES.STAFF)!,
+    },
+  });
+  await prisma.userPermission.upsert({
+    where: {
+      userId_permissionId: { userId: staffSupport.id, permissionId: permissions.get(PERMISSIONS.SUPPORT_MANAGE)! },
+    },
+    update: { granted: true },
+    create: { userId: staffSupport.id, permissionId: permissions.get(PERMISSIONS.SUPPORT_MANAGE)!, granted: true },
+  });
 
   const delivery1 = await prisma.user.upsert({
     where: { email: 'delivery1@foodbowl.local' },
@@ -493,6 +484,7 @@ async function main() {
     { role: 'restaurant_owner', email: owner.email },
     { role: 'staff (orders.manage only)', email: staffOrders.email },
     { role: 'staff (+ menu.manage, delivery.assign)', email: staffMenuAndDelivery.email },
+    { role: 'staff (+ support.manage)', email: staffSupport.email },
     { role: 'delivery_partner', email: delivery1.email },
     { role: 'delivery_partner', email: delivery2.email },
     ...customers.map((c) => ({ role: 'customer', email: c.email })),

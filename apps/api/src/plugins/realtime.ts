@@ -55,6 +55,17 @@ export default fp(async (fastify) => {
       }
     });
 
+    socket.on(REALTIME.ACTIONS.JOIN_SUPPORT, async (ack?: Ack) => {
+      try {
+        const actor = await getActor(userId);
+        if (!actor.permissions.has(PERMISSIONS.SUPPORT_MANAGE)) return reply(ack, { ok: false, error: 'forbidden' });
+        await socket.join(REALTIME.rooms.support);
+        reply(ack, { ok: true });
+      } catch {
+        reply(ack, { ok: false, error: 'forbidden' });
+      }
+    });
+
     socket.on(REALTIME.ACTIONS.JOIN_ORDER, async (orderId: unknown, ack?: Ack) => {
       try {
         if (typeof orderId !== 'string') return reply(ack, { ok: false, error: 'bad request' });

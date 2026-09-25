@@ -14,6 +14,7 @@ export const PERMISSIONS = {
   REPORTS_VIEW: 'reports.view',
   RESTAURANT_MANAGE: 'restaurant.manage',
   USERS_MANAGE: 'users.manage',
+  SUPPORT_MANAGE: 'support.manage', // answer and assign customer support conversations
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

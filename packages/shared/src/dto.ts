@@ -1,4 +1,5 @@
 import type { OrderStatus } from './constants/order-status';
+import type { SupportCategory, SupportStatus } from './schemas/support.schema';
 
 /**
  * Response shapes shared by the API (which builds them) and the web app
@@ -169,6 +170,59 @@ export interface NotificationListDTO {
   unreadCount: number;
 }
 
+export interface SupportMessageDTO {
+  id: string;
+  ticketId: string;
+  /** SYSTEM messages are events ("marked as resolved"), not something a person wrote. */
+  kind: 'TEXT' | 'SYSTEM';
+  body: string;
+  /** Internal notes are only ever sent to staff. */
+  isInternal: boolean;
+  sender: { id: string; name: string; role: string } | null;
+  /** True when a member of staff wrote it (as opposed to the customer). */
+  fromStaff: boolean;
+  createdAt: string;
+}
+
+export interface SupportTicketDTO {
+  id: string;
+  /** Human-friendly reference, e.g. SUP-1042. */
+  number: string;
+  subject: string;
+  category: SupportCategory;
+  status: SupportStatus;
+  requester: { id: string; name: string; email: string; phone: string | null };
+  order: { id: string; orderNumber: string; status: OrderStatus } | null;
+  assignedTo: { id: string; name: string } | null;
+  lastMessageAt: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  /** New activity the viewing side hasn't opened yet. */
+  unread: boolean;
+  /** The latest customer-visible message (for list previews). */
+  lastMessage: { body: string; fromStaff: boolean; senderName: string; createdAt: string } | null;
+}
+
+export interface SupportTicketDetailDTO extends SupportTicketDTO {
+  messages: SupportMessageDTO[];
+}
+
+export interface SupportAgentDTO {
+  id: string;
+  name: string;
+  role: string;
+  /** Conversations currently assigned to them that aren't resolved. */
+  openAssigned: number;
+}
+
+export interface SupportSummaryDTO {
+  open: number;
+  waitingOnCustomer: number;
+  unassigned: number;
+  mine: number;
+  unread: number;
+}
+
 /** Socket.IO contract — names live here so server and client cannot drift. */
 export const REALTIME = {
   NAMESPACE: '/orders',
@@ -177,16 +231,23 @@ export const REALTIME = {
     ORDER_UPDATED: 'order:updated',
     ORDER_PLACED: 'order:placed',
     NOTIFICATION: 'notification:new',
+    /** A support conversation was created or changed (payload: SupportTicketDTO). */
+    SUPPORT_TICKET: 'support:ticket',
+    /** A message was added to a conversation (payload: SupportMessageDTO). */
+    SUPPORT_MESSAGE: 'support:message',
   },
   /** Client → server. */
   ACTIONS: {
     JOIN_ORDER: 'order:join',
     LEAVE_ORDER: 'order:leave',
     JOIN_QUEUE: 'queue:join',
+    /** Staff with support.manage: receive every support event. */
+    JOIN_SUPPORT: 'support:join',
   },
   rooms: {
     order: (orderId: string) => `order:${orderId}`,
     queue: 'restaurant:orders',
+    support: 'support:staff',
     user: (userId: string) => `user:${userId}`,
   },
 } as const;

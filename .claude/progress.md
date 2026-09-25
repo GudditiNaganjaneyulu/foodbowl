@@ -2,7 +2,7 @@
 
 Tracks actual progress against the milestones in [BUILD_PROMPT.md](../BUILD_PROMPT.md) §14. Update this file at the end of each work session — check off what's done, note what's next, record anything a future session needs to know that isn't obvious from the code.
 
-Last updated: 2026-09-22
+Last updated: 2026-09-25
 
 ## Status by milestone
 
@@ -11,19 +11,20 @@ Last updated: 2026-09-22
 - [x] **2a. User Management UI** (BUILD_PROMPT.md §3.4, added after initial scaffold per explicit request) — `/admin/users` page: add user, deactivate/reactivate, change role, per-staff permission checklist. Backed by `/api/v1/admin/users*`, gated on `users.manage` (owner-only). Verified live: 401 unauthenticated, 403 for staff lacking permission, full deactivate→reactivate→login cycle, audit log writes.
 - [x] **3. Observability plumbing** — pino logger with trace/span correlation, OpenTelemetry bootstrap (`src/lib/tracing.ts`, loaded via `--import`), otel-collector + Jaeger + Mailpit in docker-compose, `/health` and `/health/ready` endpoints. **Not yet verified**: a trace actually showing up in the Jaeger UI end-to-end (collector was up during testing but I didn't check the Jaeger UI itself — worth a quick look next session).
 - [x] **4a. Menu module — read side** — Public `GET /api/v1/menu` works, verified live against seeded data. Theme-complete storefront page consuming it (category tabs, item cards, add-to-cart into a local cart context).
-- [ ] **4b. Menu module — write side / admin UI** — `POST/PATCH/DELETE` menu routes exist and typecheck, but there's **no admin UI wired to them yet** — `/admin/menu` and `/staff/menu` are still "coming soon" placeholders. Not live-tested.
-- [ ] **5. Cart + order placement** — Cart is currently **client-local only** (`apps/web/lib/cart-context.tsx`, in-memory, not persisted). No `/api/v1/cart` or `/api/v1/orders` (POST) backend routes exist yet. Checkout button on `/cart` is disabled with an explanatory note. This is the next real milestone.
-- [ ] **6. Order lifecycle + Socket.IO** — Shared order-status state machine constants exist (`packages/shared/src/constants/order-status.ts`, `TRANSITION_REQUIREMENTS`), but no `OrderService.transition()`, no Socket.IO wiring, no order queue UI yet.
-- [ ] **7. Delivery workflow** — `DeliveryAssignment` schema exists; no service/routes/UI yet.
-- [ ] **8. Notifications** — `Notification` schema exists; no `NotificationProvider`/service/routes yet.
-- [ ] **9. Frontend polish** — Deferred until the above land (no point polishing placeholder screens).
-- [ ] **10. Tests** — No automated tests written yet (Vitest/Supertest are installed as devDependencies but unused).
+- [x] **4b. Menu module — write side / admin UI** (2026-09-25) — `/admin/menu` and `/staff/menu` (`menu.manage`): categories (rename/hide), items (photo, price, veg, availability, sort), customization option groups, delete (blocked with a clear message if the dish is in past orders). Backed by `GET /menu/admin`, `PATCH /menu/categories/:id`, modifier-group create/delete. Tested (API) and driven in a real browser.
+- [x] **5. Cart + order placement** (2026-09-25) — Server-backed cart (guest cart in localStorage merges on login), saved addresses, restaurant settings, `POST /orders` in one transaction with price/name/modifier snapshots, COD `PaymentProvider`. Per-item special instructions (`OrderItem.note`). See "2026-09-25 session" below.
+- [x] **6. Order lifecycle + Socket.IO** (2026-09-25) — `OrderService.transition()` is the only writer of `Order.status` (pure rules in `order-rules.ts`, compare-and-set against races, status log, OTel event, live push). Live kanban queue + customer tracking page.
+- [x] **7. Delivery workflow** (2026-09-25) — offer/re-offer, accept/decline, pickup, delivered (cash must be confirmed; assignment + COD payment + order status change in ONE transaction). Rider screens, dispatch board, proof-of-delivery photo (camera on phones) shown to customer/staff/rider.
+- [x] **8. Notifications** (2026-09-25) — `NotificationProvider` interface: in-app (stored + live `notification:new`), email (opt-in via `EMAIL_NOTIFICATIONS_ENABLED`), push stub. Bell in every header.
+- [x] **9. Frontend polish** (2026-09-25) — owner overview (real revenue/orders/best sellers), profile editing + first-run checklist, photo menu redesign, full mobile pass (every main screen checked at 390px in the browser test).
+- [x] **10. Tests** (2026-09-25) — 161 API tests (unit + integration vs a throwaway Postgres) and a 49-step five-browser end-to-end journey in `e2e/`. See "Testing" below.
 - [x] **11. README** — Local dev setup instructions written and match what's actually implemented.
 - [x] **12. Infra: direct NeonDB + Brevo SMTP** (2026-09-22) — Switched from local docker-compose Postgres to a direct NeonDB connection everywhere (dev, Docker, prod-style), and from Mailpit-only to Brevo (free tier) for real SMTP, with Mailpit kept as an optional local fallback. See details below.
 - [x] **13. Self-service password change** (2026-09-22) — `PATCH /api/v1/users/me/password` (verify current password → argon2 rehash → revoke other sessions' refresh tokens) + a "Change password" card on `/profile`. This is how the seeded default logins (e.g. `owner@foodbowl.local` / `Password123!`) are meant to be rotated off — not by editing the DB. README now documents the default login/password/dashboard URL per role explicitly; login page shows a dev-only quick-fill hint for the seeded accounts (hidden when `NODE_ENV=production`).
 - [x] **14. `docker compose up` actually works now** (2026-09-22) — The user ran the full stack (`api`+`web`+infra) and hit 3 real, previously-unverified bugs, all now fixed and confirmed against a fresh rebuild with 0 container restarts. See details below.
 - [x] **15. Swiggy/Zomato-inspired mobile-first storefront redesign** (2026-09-22) — Customer-facing UI ((public)+(customer) route groups) rebuilt around patterns those apps actually use: fixed bottom tab nav, sticky "view cart" bar, veg/non-veg square-dot indicator, sticky jump-to category chips over one continuous scroll (not tabbed show/hide), Swiggy-style item rows instead of image-grid cards. See details below.
 - [x] **16. Upstash Redis — auth rate limiting + menu caching** (2026-09-22) — `@upstash/redis` wired in, optional by design (graceful no-op when unconfigured, verified live). `docs/GETTING_STARTED.md` (new) written with full external-service setup + detailed default-login docs + troubleshooting. See details below.
+- [x] **18. Customer support** (2026-09-25) — conversations customers open (optionally about an order); `support.manage` staff/owner reply, assign to a colleague, add internal notes, resolve; live over Socket.IO; notifications; mobile-first UI in all three portals.
 - [x] **17. Login/logout hardening + item customization (modifier groups)** (2026-09-22) — Found and fixed two real auth bugs (no logout button existed anywhere on mobile; no route guard on `/admin`, `/staff`, `/delivery`) and verified the full login→refresh→logout→post-logout-refresh-rejected cycle live for all 4 roles. Also built the item-detail customization sheet (size/spice-level/add-ons) that the schema/API already supported but the UI never used, inspired by user-provided reference screenshots. See details below.
 
 ## What's been verified live (not just typechecked)
@@ -122,7 +123,45 @@ User asked to "make sure login and logout works perfect" and shared 4 reference 
 
 **Not applied from the screenshots** (deliberately, not an oversight): the analytics-dashboard screenshot's charts/revenue numbers — building that would mean fabricating order/revenue data that doesn't exist yet (no orders module built), which would misrepresent a demo as real. The nutrition-tracker screenshot's calorie-journal pattern isn't applicable to a food-ordering product. The delivery app's voucher-code input on the cart page wasn't added either, for the same reason — there's no discount/coupon system built, and a non-functional input that looks real would be misleading.
 
-## Known gaps / things to double check next session
+
+## 2026-09-25 session — orders, delivery, support, photos, mobile
+
+Built milestones 4b–10 plus customer support. What a future session needs to know:
+
+**Architecture decisions**
+- **Everything that changes an order goes through `applyTransition` / `transition()`** (`modules/orders/order.service.ts`). Delivery pickup/delivered call `applyTransition` inside their own transaction so the assignment, COD payment and order status can never disagree. Side effects (socket push, notifications) run only after commit via `publishTransition`.
+- **Prices are never trusted from the client.** Cart/order requests carry ids only; names and price deltas are resolved from the DB (`modules/cart/pricing.ts`), and orders snapshot them.
+- **Route `schema` objects are documentation only.** `plugins/swagger.ts` swaps Fastify's validator/serializer for no-ops so Zod stays the sole validator and responses are never filtered. Each module has a `*.docs.ts`; the spec is served at `/docs` and is validated (OpenAPI 3.0.3, 52 paths).
+- **Photos live in storage, never in the repo or web app.** `lib/storage` has a `StorageProvider` (Supabase, or built-in disk fallback under `UPLOAD_DIR` served at `/files/...`). The DB stores an absolute bucket URL (or an API-relative `/files/..` path, resolved by `apps/web/lib/asset-url.ts`). Dish photos for the seed are in the bucket at `menu-images/seed/<name>.jpg`; credits in `docs/MENU_PHOTO_CREDITS.md`. The seed only references them (after checking each exists).
+- **Support permission:** `support.manage`. New permissions reach an existing DB with `pnpm db:sync-rbac` (roles/permissions only, no demo data) — run it after `db:deploy` on every release that adds one.
+- **Realtime:** namespace `/orders`; rooms `user:{id}` (automatic), `order:{id}`, `restaurant:orders` (orders.view), `support:staff` (support.manage). Access is re-checked at join time. Internal support notes are only ever emitted to the staff room.
+
+**Real bugs found and fixed along the way** (each has a regression test)
+- **Refresh was O(sessions)**: it argon2-verified every live token a user had, so one refresh took 7.6 s at 130 tokens (and was a CPU-DoS lever). Now the token's `jti` is the row id, hashed with SHA-256, redeemed atomically (a stolen cookie can't be spent twice), sessions capped at 20 and pruned. Existing sessions were invalidated once.
+- `Content-Type: application/json` with an empty body was a 400 → silent session refresh and browser logout never worked. Client no longer sends the header without a body; the server also accepts empty JSON bodies.
+- Race after login: the token ref was updated in an effect, so child components' first requests went out without it → 401 → refresh → session wrongly ended. Ref is now set synchronously; only a definitive 401/403 ends a session.
+- Refresh tokens minted in the same second were byte-identical (no `jti`), defeating rotation.
+- `z.coerce.boolean()` turned `SMTP_SECURE=false` into `true`.
+- Unknown ids surfaced as 500 (now 404); Neon cold start surfaced as 500 (now a retryable 503 the web client retries).
+- Menu "Delete" on a dish in a cart/order failed obscurely; dishes with order history now say to mark them unavailable.
+- Mobile: dashboards overflowed sideways (flex `min-width:auto`); the ADD button was clipped by the photo; menu editor rows squeezed names to "Ma…".
+- Seed: `staff.orders` was labelled "orders.manage only" but never granted it.
+
+**Testing**
+- `pnpm --filter @foodbowl/api test` — unit tests always; integration suites only with `TEST_DATABASE_URL` set (they refuse to touch the `.env` DB). Each suite sets its own baseline and cleans up. Setup in `docs/GETTING_STARTED.md` §7.
+- `e2e/` — Playwright (system Chrome) journey with five simultaneous sessions plus a mobile audit. It is destructive to its database; see `e2e/README.md`.
+
+**Verified against real services**: Supabase server-side upload and the browser-style signed (multipart) upload both work against the real `menu-images` bucket. **Not verified**: real email delivery (opt-in, off in tests), real Upstash Redis behaviour (still no token), `next start` under Docker.
+
+**Deployment gotcha hit for real**: deploying new code without running `prisma migrate deploy` fails order placement with "column `note` does not exist". Migrations must run on every deploy (`docs/DEPLOYMENT.md` → Upgrading).
+
+## Known gaps / next ideas
+- Opening hours are informational only (no timezone); `isOpen` is the sole gate.
+- Support has no attachments, canned replies, or SLA timers; conversations can't be merged.
+- No push (only in-app/email); no automatic dispatch.
+- The `infra/` compose files, Dockerfiles and `deploy.yml` were being rewritten by the owner — the workflow still references files that may have moved; keep it in sync and add the migrate + `db:sync-rbac` steps.
+
+## Older notes: known gaps from earlier sessions
 
 - Docker/Colima wasn't running at the start of the previous session and had to be started manually (`colima start`) before `docker compose` worked — if resuming on a machine without Colima already running, expect the same.
 - `RequireRole`'s actual browser redirect behavior hasn't been watched happen in a real browser (see above) — worth a manual click-through if a browser/screenshot tool ever becomes available.
@@ -135,4 +174,4 @@ User asked to "make sure login and logout works perfect" and shared 4 reference 
 
 ## Suggested next session starting point
 
-Milestone 5 (Cart + Order placement) per BUILD_PROMPT.md §14: build `/api/v1/cart` (GET/POST/PATCH/DELETE) and `/api/v1/orders` (POST place order from cart, snapshotting prices), wire the frontend cart context to it, and replace the disabled "Checkout (COD)" button on `/cart` with a real flow.
+All BUILD_PROMPT.md §14 milestones are done. Reasonable next steps: run `pnpm db:deploy` + `pnpm --filter @foodbowl/api db:sync-rbac` on any long-lived database; add the migrate/sync steps to the deploy workflow; TLS in front of the API (the refresh cookie is `Secure` in production, so login over plain http won't stick); exercise Upstash Redis once a REST token is available; and a timezone-aware opening-hours setting.

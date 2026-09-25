@@ -1,10 +1,11 @@
 'use client';
 
-import { ListOrdered, Truck, UtensilsCrossed } from 'lucide-react';
+import { LifeBuoy, ListOrdered, Truck, UtensilsCrossed } from 'lucide-react';
 import { PERMISSIONS, ROLES } from '@foodbowl/shared';
 import { DashboardShell } from '@/components/layout/dashboard-shell';
 import { RequireRole } from '@/components/layout/require-role';
 import { usePermissions } from '@/lib/auth-context';
+import { useSupportSummary } from '@/lib/use-support';
 
 /**
  * Nav visibility mirrors the staff member's granted permissions (see
@@ -13,11 +14,13 @@ import { usePermissions } from '@/lib/auth-context';
  */
 export default function StaffLayout({ children }: { children: React.ReactNode }) {
   const { hasPermission } = usePermissions();
+  const support = useSupportSummary();
 
   const navItems = [
     { href: '/staff', label: 'Order queue', icon: ListOrdered, permission: PERMISSIONS.ORDERS_VIEW },
     { href: '/staff/menu', label: 'Menu', icon: UtensilsCrossed, permission: PERMISSIONS.MENU_MANAGE },
     { href: '/staff/delivery', label: 'Delivery assignment', icon: Truck, permission: PERMISSIONS.DELIVERY_ASSIGN },
+    { href: '/staff/support', label: 'Customer support', icon: LifeBuoy, permission: PERMISSIONS.SUPPORT_MANAGE, badge: support?.unread },
   ].filter((item) => hasPermission(item.permission));
 
   return (

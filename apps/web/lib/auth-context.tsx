@@ -18,6 +18,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<AuthUser>;
   register: (input: { email: string; password: string; name: string; phone?: string }) => Promise<AuthUser>;
   logout: () => Promise<void>;
+  /** Re-reads the signed-in user from the server (e.g. after they edit their name). */
+  refreshUser: () => Promise<void>;
   /** Silently renews the access token; resolves with the new token, or null if the session is over. */
   refreshSession: () => Promise<string | null>;
   hasPermission: (permission: string) => boolean;
@@ -152,14 +154,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearSession();
   }, [clearSession]);
 
+  const refreshUser = React.useCallback(async () => {
+    const me = await apiClient.get<AuthUser>('/api/v1/users/me');
+    userRef.current = me;
+    setUser(me);
+  }, []);
+
+  // Permissions are a snapshot taken at sign-in. If the owner grants one (or a
+  // release adds one) while this tab is open, pick it up when the person comes
+  // back to the tab instead of leaving them on stale access until a reload.
+  const signedIn = Boolean(user);
+  const lastUserCheck = React.useRef(0);
+  React.useEffect(() => {
+    if (!signedIn) return;
+    const recheck = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastUserCheck.current < 30_000) return;
+      lastUserCheck.current = Date.now();
+      void refreshUser().catch(() => undefined);
+    };
+    lastUserCheck.current = Date.now();
+    document.addEventListener('visibilitychange', recheck);
+    window.addEventListener('focus', recheck);
+    return () => {
+      document.removeEventListener('visibilitychange', recheck);
+      window.removeEventListener('focus', recheck);
+    };
+  }, [signedIn, refreshUser]);
+
   const hasPermission = React.useCallback(
     (permission: string) => user?.permissions.includes(permission) ?? false,
     [user],
   );
 
   const value = React.useMemo(
-    () => ({ user, accessToken, isLoading, login, register: registerFn, logout, refreshSession, hasPermission }),
-    [user, accessToken, isLoading, login, registerFn, logout, refreshSession, hasPermission],
+    () => ({ user, accessToken, isLoading, login, register: registerFn, logout, refreshSession, refreshUser, hasPermission }),
+    [user, accessToken, isLoading, login, registerFn, logout, refreshSession, refreshUser, hasPermission],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,4 +1,4 @@
-import { ALL_PERMISSIONS, ALL_ROLES, ORDER_STATUS } from '@foodbowl/shared';
+import { ALL_PERMISSIONS, ALL_ROLES, ORDER_STATUS, SUPPORT_CATEGORIES, SUPPORT_STATUSES } from '@foodbowl/shared';
 import { ref, type JsonSchema } from './openapi';
 
 const ORDER_STATUSES = Object.values(ORDER_STATUS);
@@ -240,6 +240,80 @@ export const shopComponentSchemas: Record<string, JsonSchema> = {
       isRead: { type: 'boolean' },
       metadata: { type: 'object', additionalProperties: true },
       createdAt: timestamp('When it was created.'),
+    },
+  },
+
+  SupportMessage: {
+    type: 'object',
+    properties: {
+      id: cuid('Message id.'),
+      ticketId: cuid('Conversation id.'),
+      kind: { type: 'string', enum: ['TEXT', 'SYSTEM'], description: 'SYSTEM = an event ("marked as resolved"), not written by a person.' },
+      body: { type: 'string' },
+      isInternal: { type: 'boolean', description: 'Staff-only note. Never returned to customers.' },
+      sender: {
+        type: 'object',
+        nullable: true,
+        properties: { id: cuid('User id.'), name: { type: 'string' }, role: { type: 'string', enum: ALL_ROLES } },
+      },
+      fromStaff: { type: 'boolean', description: 'Written by the restaurant rather than the customer.' },
+      createdAt: timestamp('When it was sent.'),
+    },
+  },
+
+  SupportTicket: {
+    type: 'object',
+    properties: {
+      id: cuid('Conversation id.'),
+      number: { type: 'string', example: 'SUP-482913' },
+      subject: { type: 'string' },
+      category: { type: 'string', enum: [...SUPPORT_CATEGORIES] },
+      status: { type: 'string', enum: [...SUPPORT_STATUSES], description: 'OPEN = waiting on the restaurant, PENDING = waiting on the customer.' },
+      requester: {
+        type: 'object',
+        properties: { id: cuid('User id.'), name: { type: 'string' }, email: { type: 'string', format: 'email' }, phone: { type: 'string', nullable: true } },
+      },
+      order: {
+        type: 'object',
+        nullable: true,
+        properties: { id: cuid('Order id.'), orderNumber: { type: 'string' }, status: { type: 'string', enum: ORDER_STATUSES } },
+      },
+      assignedTo: { type: 'object', nullable: true, properties: { id: cuid('User id.'), name: { type: 'string' } } },
+      lastMessageAt: timestamp('Latest customer-visible activity.'),
+      createdAt: timestamp('When it was opened.'),
+      resolvedAt: nullableTimestamp('When it was resolved.'),
+      unread: { type: 'boolean', description: 'New activity the viewing side has not opened yet.' },
+      lastMessage: {
+        type: 'object',
+        nullable: true,
+        properties: { body: { type: 'string' }, fromStaff: { type: 'boolean' }, senderName: { type: 'string' }, createdAt: timestamp('Sent at.') },
+      },
+    },
+  },
+
+  SupportTicketDetail: {
+    type: 'object',
+    allOf: [ref('SupportTicket'), { type: 'object', properties: { messages: { type: 'array', items: ref('SupportMessage') } } }],
+  },
+
+  SupportAgent: {
+    type: 'object',
+    properties: {
+      id: cuid('User id.'),
+      name: { type: 'string' },
+      role: { type: 'string', enum: ALL_ROLES },
+      openAssigned: { type: 'integer', description: 'Unresolved conversations currently assigned to them.' },
+    },
+  },
+
+  SupportSummary: {
+    type: 'object',
+    properties: {
+      open: { type: 'integer' },
+      waitingOnCustomer: { type: 'integer' },
+      unassigned: { type: 'integer' },
+      mine: { type: 'integer' },
+      unread: { type: 'integer' },
     },
   },
 };

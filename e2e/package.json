@@ -1,0 +1,12 @@
+{
+  "name": "foodbowl-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Multi-browser end-to-end journey. Deliberately NOT part of the pnpm workspace: it only needs playwright-core and a Chrome install.",
+  "scripts": {
+    "test": "node journey.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}

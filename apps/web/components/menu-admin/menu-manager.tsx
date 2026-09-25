@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { EyeOff, Pencil, Plus, Trash2 } from 'lucide-react';
+import { FoodImage } from '@/components/menu/food-image';
 import { VegIndicator } from '@/components/menu/veg-indicator';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -155,26 +156,32 @@ export function MenuManager() {
           <CardContent className="divide-y divide-border p-0">
             {category.menuItems.length === 0 && <p className="p-4 text-sm text-muted-foreground">No items yet.</p>}
             {category.menuItems.map((item) => (
-              <div key={item.id} className={cn('flex items-center gap-3 p-4', !item.isAvailable && 'bg-muted/40')} data-testid="menu-item" data-item={item.name}>
-                <VegIndicator isVeg={item.isVeg} />
-                <div className="min-w-0 flex-1">
-                  <p className={cn('truncate font-medium', !item.isAvailable && 'text-muted-foreground')}>
-                    {item.name}
-                    {item.modifierGroups.length > 0 && <span className="ml-2 text-xs font-normal text-primary">{item.modifierGroups.length} option group{item.modifierGroups.length === 1 ? '' : 's'}</span>}
-                  </p>
-                  {item.description && <p className="truncate text-xs text-muted-foreground">{item.description}</p>}
+              <div key={item.id} className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 p-4', !item.isAvailable && 'bg-muted/40')} data-testid="menu-item" data-item={item.name}>
+                <FoodImage src={item.imageUrl} alt={item.name} className="h-12 w-12 shrink-0 rounded-lg" />
+                <div className="min-w-0 flex-1 basis-40">
+                  <VegIndicator isVeg={item.isVeg} className="mb-1" />
+                  <p className={cn('line-clamp-2 font-medium leading-snug', !item.isAvailable && 'text-muted-foreground')}>{item.name}</p>
+                  {item.modifierGroups.length > 0 && (
+                    <p className="text-xs text-primary">{item.modifierGroups.length} option group{item.modifierGroups.length === 1 ? '' : 's'}</p>
+                  )}
+                  {item.description && <p className="line-clamp-1 text-xs text-muted-foreground">{item.description}</p>}
                 </div>
-                <span className="w-16 text-right text-sm font-semibold tabular-nums">{money(item.price)}</span>
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="hidden sm:inline">{item.isAvailable ? 'Available' : 'Sold out'}</span>
-                  <Switch aria-label={`${item.name} available`} checked={item.isAvailable} onCheckedChange={(v) => setAvailable(item, v)} />
-                </label>
-                <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={`Edit ${item.name}`} onClick={() => setDialog({ categoryId: category.id, item })}>
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" aria-label={`Delete ${item.name}`} onClick={() => removeItem(item)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {/* Phones: this row wraps under the name (full width, spread out). Wider screens: it sits inline. */}
+                <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end sm:gap-3">
+                  <span className="text-sm font-semibold tabular-nums sm:w-16 sm:text-right">{money(item.price)}</span>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{item.isAvailable ? 'Available' : 'Sold out'}</span>
+                    <Switch aria-label={`${item.name} available`} checked={item.isAvailable} onCheckedChange={(v) => setAvailable(item, v)} />
+                  </label>
+                  <div className="flex items-center">
+                    <Button size="icon" variant="ghost" className="h-9 w-9" aria-label={`Edit ${item.name}`} onClick={() => setDialog({ categoryId: category.id, item })}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-9 w-9 text-destructive" aria-label={`Delete ${item.name}`} onClick={() => removeItem(item)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             ))}
           </CardContent>

@@ -177,7 +177,9 @@ describeDb('cart, checkout and order lifecycle (needs TEST_DATABASE_URL)', () =>
       const order = res.body as OrderDTO;
       expect(order.items).toHaveLength(2);
       expect(order.items.map((i) => i.note)).toEqual(expect.arrayContaining([null, 'Extra crispy, please']));
-      expect(order.items[0]!.imageUrl).toBe('/menu/crispy-spring-rolls.jpg');
+      // The order shows the dish's photo from storage (whatever URL the menu item holds).
+      const photo = (await prisma.menuItem.findUniqueOrThrow({ where: { id: SEED.springRolls } })).imageUrl;
+      expect(order.items.every((i) => i.imageUrl === photo)).toBe(true);
       // …and the kitchen sees it too, not just the customer.
       const forKitchen = (await kitchen.req('GET', `/api/v1/orders/${order.id}`)).body as OrderDTO;
       expect(forKitchen.items.find((i) => i.note)?.note).toBe('Extra crispy, please');

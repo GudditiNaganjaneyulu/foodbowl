@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, LogOut, UserCircle2 } from 'lucide-react';
+import { LayoutDashboard, LifeBuoy, LogOut, UserCircle2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AddressBook } from '@/components/address/address-book';
+import { OnboardingCard } from '@/components/profile/onboarding-card';
+import { ProfileDetails, type MeDTO } from '@/components/profile/profile-details';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { dashboardHomeFor } from '@/lib/dashboard-routes';
@@ -28,6 +30,16 @@ export default function ProfilePage() {
   const { user, isLoading, logout } = useAuth();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = React.useState(false);
+  const [me, setMe] = React.useState<MeDTO | null>(null);
+  const [addressCount, setAddressCount] = React.useState<number | null>(null);
+  const [welcome, setWelcome] = React.useState(false);
+
+  React.useEffect(() => {
+    setWelcome(new URLSearchParams(window.location.search).get('welcome') === '1');
+  }, []);
+  React.useEffect(() => {
+    if (user) apiClient.get<MeDTO>('/api/v1/users/me').then(setMe).catch(() => undefined);
+  }, [user]);
 
   if (isLoading) return null;
 
@@ -77,6 +89,11 @@ export default function ProfilePage() {
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-2">
+          <Button variant="outline" className="w-full" asChild>
+            <Link href="/support">
+              <LifeBuoy className="h-4 w-4" /> Help &amp; support
+            </Link>
+          </Button>
           {user.role !== 'customer' && (
             <Button variant="outline" className="w-full" asChild>
               <Link href={dashboardHomeFor(user.role)}>
@@ -95,7 +112,15 @@ export default function ProfilePage() {
         </CardFooter>
       </Card>
 
-      <AddressBook />
+      {user.role === 'customer' && me && (
+        <OnboardingCard name={me.name} welcome={welcome} hasPhone={Boolean(me.phone)} addressCount={addressCount} />
+      )}
+
+      {me && <ProfileDetails me={me} onSaved={setMe} />}
+
+      <div id="saved-addresses">
+        <AddressBook onLoaded={(list) => setAddressCount(list.length)} />
+      </div>
 
       <ChangePasswordCard />
     </div>

@@ -20,6 +20,7 @@ import notificationRoutes from './modules/notifications/notification.routes';
 import uploadRoutes from './modules/uploads/upload.routes';
 import reportRoutes from './modules/reports/report.routes';
 import fileRoutes from './modules/uploads/files.routes';
+import supportRoutes from './modules/support/support.routes';
 import { MAX_UPLOAD_BYTES } from '@foodbowl/shared';
 
 /**
@@ -71,6 +72,7 @@ export async function buildApp() {
   await fastify.register(notificationRoutes, { prefix: '/api/v1/notifications' });
   await fastify.register(uploadRoutes, { prefix: '/api/v1/uploads' });
   await fastify.register(reportRoutes, { prefix: '/api/v1/admin/reports' });
+  await fastify.register(supportRoutes, { prefix: '/api/v1/support' });
   await fastify.register(fileRoutes, { prefix: '/files' });
 
   return fastify;

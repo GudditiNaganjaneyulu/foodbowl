@@ -1,5 +1,5 @@
-import { ORDER_STATUS, type OrderDTO, type OrderStatus } from '@foodbowl/shared';
-import { notify, restaurantDispatchers, restaurantOrderStaff, type NotificationPayload } from './notification.service';
+import { ORDER_STATUS, PERMISSIONS, type OrderDTO, type OrderStatus, type SupportTicketDTO } from '@foodbowl/shared';
+import { notify, restaurantDispatchers, restaurantOrderStaff, usersWithPermission, type NotificationPayload } from './notification.service';
 
 const money = (v: string) => `$${v}`;
 
@@ -113,4 +113,56 @@ export function notifyDeliveryRejected(order: OrderDTO, reason?: string) {
         body: reason ? `Reason: ${reason}. Offer it to another partner.` : 'Offer it to another partner.',
         metadata: meta(order),
       });
+}
+
+// ── Customer support ──────────────────────────────────────────────────────
+
+const preview = (text: string) => (text.length > 120 ? `${text.slice(0, 117)}…` : text);
+const ticketMeta = (t: SupportTicketDTO) => ({ ticketId: t.id, ticketNumber: t.number, status: t.status });
+
+export function notifySupportNew(ticket: SupportTicketDTO) {
+  notify(usersWithPermission(PERMISSIONS.SUPPORT_MANAGE), {
+    type: 'support.new',
+    title: `New support request ${ticket.number}`,
+    body: `${ticket.requester.name}: ${ticket.subject}`,
+    metadata: ticketMeta(ticket),
+  });
+}
+
+/** The customer wrote back: tell whoever owns the conversation, or the whole team if nobody does. */
+export function notifySupportCustomerReply(ticket: SupportTicketDTO, body: string) {
+  const recipients = ticket.assignedTo ? Promise.resolve([ticket.assignedTo.id]) : usersWithPermission(PERMISSIONS.SUPPORT_MANAGE);
+  notify(recipients, {
+    type: 'support.customer_reply',
+    title: `${ticket.requester.name} replied (${ticket.number})`,
+    body: preview(body),
+    metadata: ticketMeta(ticket),
+  });
+}
+
+export function notifySupportStaffReply(ticket: SupportTicketDTO, body: string) {
+  notify([ticket.requester.id], {
+    type: 'support.reply',
+    title: `New reply on “${ticket.subject}”`,
+    body: preview(body),
+    metadata: ticketMeta(ticket),
+  });
+}
+
+export function notifySupportAssigned(ticket: SupportTicketDTO, assigneeId: string, assignedBy: string) {
+  notify([assigneeId], {
+    type: 'support.assigned',
+    title: `Support ${ticket.number} assigned to you`,
+    body: `${assignedBy} assigned you “${ticket.subject}” from ${ticket.requester.name}.`,
+    metadata: ticketMeta(ticket),
+  });
+}
+
+export function notifySupportResolved(ticket: SupportTicketDTO) {
+  notify([ticket.requester.id], {
+    type: 'support.resolved',
+    title: `“${ticket.subject}” was marked resolved`,
+    body: 'If you still need help, just reply to reopen it.',
+    metadata: ticketMeta(ticket),
+  });
 }

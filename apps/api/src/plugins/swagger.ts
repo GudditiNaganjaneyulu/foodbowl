@@ -47,12 +47,15 @@ automatically placed in its private \`user:{id}\` room. Then, optionally:
 |---|---|
 | \`order:join\` (orderId, ack) | Join \`order:{id}\` — allowed for the customer, staff with \`orders.view\`, or the assigned rider |
 | \`queue:join\` (ack) | Join \`restaurant:orders\` — requires \`orders.view\` |
+| \`support:join\` (ack) | Join the staff support room — requires \`support.manage\` |
 
 | Server emits | Payload |
 |---|---|
 | \`order:placed\` | Full **Order** — sent to the queue and the customer |
 | \`order:updated\` | Full **Order** (with \`statusLogs\`) on every status or delivery change |
 | \`notification:new\` | **Notification** — to the recipient's \`user:{id}\` room |
+| \`support:ticket\` | **SupportTicket** — a conversation was created or changed (staff room, and the customer's own room) |
+| \`support:message\` | **SupportMessage** — internal notes go to staff only |
 
 ## Errors
 
@@ -99,6 +102,7 @@ export default fp(async (fastify) => {
         { name: 'Cart', description: 'The logged-in user\'s persistent shopping cart.' },
         { name: 'Orders', description: 'Placing, tracking and advancing orders (cash on delivery).' },
         { name: 'Delivery', description: 'Assigning orders to delivery partners and the partner\'s pickup/delivery steps.' },
+        { name: 'Support', description: 'Customer support conversations: customers write in; staff with `support.manage` reply, assign and resolve.' },
         { name: 'Reports', description: 'Owner dashboard numbers (requires `reports.view`).' },
         { name: 'Uploads', description: 'Signed URLs for direct-to-storage image uploads.' },
         { name: 'Notifications', description: 'In-app notifications (also pushed live over Socket.IO).' },

@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Clock, MapPin, Radio, Truck } from 'lucide-react';
+import { Clock, MapPin, MessageSquareText, Radio, Truck } from 'lucide-react';
 import { type OrderDTO, type OrderStatus } from '@foodbowl/shared';
 import { OrderDetailSheet } from '@/components/orders/order-detail-sheet';
 import { OrderStatusBadge } from '@/components/orders/order-status-badge';
@@ -94,7 +94,7 @@ export function OrderQueue() {
               No active orders. New ones will appear here the moment they're placed.
             </p>
           )}
-          <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0" data-testid="kanban">
+          <div className="-mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:scroll-px-0 md:px-0" data-testid="kanban">
             {COLUMNS.map((status) => {
               const orders = byStatus(status);
               return (
@@ -173,6 +173,7 @@ function OrderCard({
   const next = KITCHEN_NEXT[order.status];
   const waiting = order.status === 'PLACED' && now - new Date(order.placedAt).getTime() > STALE_PLACED_MS;
   const itemCount = order.items.reduce((n, i) => n + i.quantity, 0);
+  const itemNotes = order.items.filter((i) => i.note).length;
 
   return (
     <Card className={cn('transition-colors hover:bg-accent/30', waiting && 'border-destructive/60')} data-testid="order-card" data-order-number={order.orderNumber}>
@@ -196,6 +197,11 @@ function OrderCard({
             </span>
           )}
           {order.notes && <span className="line-clamp-1 text-xs italic text-muted-foreground">“{order.notes}”</span>}
+          {itemNotes > 0 && (
+            <span className="flex items-center gap-1 text-xs font-medium text-warning-foreground" data-testid="has-item-notes">
+              <MessageSquareText className="h-3 w-3" /> {itemNotes} item{itemNotes === 1 ? '' : 's'} with special instructions
+            </span>
+          )}
         </button>
         {next && canManage && (
           <Button size="sm" disabled={busy} onClick={() => onAdvance(next.to)} data-testid="advance">

@@ -10,3 +10,4 @@ export * from './schemas/order.schema';
 export * from './schemas/restaurant.schema';
 export * from './dto';
 export * from './schemas/upload.schema';
+export * from './schemas/support.schema';

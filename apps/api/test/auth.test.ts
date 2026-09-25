@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { SignJWT } from 'jose';
 import type { FastifyInstance } from 'fastify';
 import { deleteSince } from './cleanup';
 import { ACCOUNTS, DEV_PASSWORD, describeDb, login, type Session } from './helpers';
@@ -131,6 +132,71 @@ describeDb('authentication (needs TEST_DATABASE_URL)', () => {
     expect((await post('/api/v1/auth/refresh', undefined, refreshCookie(other)!)).statusCode).toBe(401);
   });
 
+  describe('refresh token scaling and safety', () => {
+    const secret = () => new TextEncoder().encode(process.env.JWT_REFRESH_SECRET!);
+    const userIdOf = async (e: string) => (await prisma.user.findUniqueOrThrow({ where: { email: e } })).id;
+    const fakeRows = (userId: string, n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `fake-${userId}-${Date.now()}-${i}`,
+        userId,
+        tokenHash: `not-a-real-hash-${i}`,
+        expiresAt: new Date(Date.now() + 86_400_000),
+      }));
+
+    it('redeems a token with a single lookup — speed does not depend on how many sessions exist', async () => {
+      const e = `auth-scale-${Date.now()}@test.local`;
+      await post('/api/v1/auth/register', { email: e, password, name: 'Scale Test' });
+      const cookie = refreshCookie(await post('/api/v1/auth/login', { email: e, password }))!;
+      // Simulate a user with hundreds of live sessions (previously: one argon2 verify per session per refresh).
+      await prisma.refreshToken.createMany({ data: fakeRows(await userIdOf(e), 300) });
+
+      const started = Date.now();
+      const res = await post('/api/v1/auth/refresh', undefined, cookie);
+      const took = Date.now() - started;
+      expect(res.statusCode).toBe(200);
+      expect(took, `refresh took ${took}ms with 300+ live sessions`).toBeLessThan(750);
+    });
+
+    it('lets exactly one of two simultaneous refreshes with the same cookie succeed', async () => {
+      const cookie = refreshCookie(await post('/api/v1/auth/login', { email, password: 'second-password-2' }))!;
+      const [a, b] = await Promise.all([post('/api/v1/auth/refresh', undefined, cookie), post('/api/v1/auth/refresh', undefined, cookie)]);
+      expect([a.statusCode, b.statusCode].sort()).toEqual([200, 401]);
+    });
+
+    it('caps the number of signed-in devices and prunes stale sessions on login', async () => {
+      const e = `auth-cap-${Date.now()}@test.local`;
+      await post('/api/v1/auth/register', { email: e, password, name: 'Cap Test' });
+      const userId = await userIdOf(e);
+      await prisma.refreshToken.createMany({ data: fakeRows(userId, 40) });
+      await prisma.refreshToken.create({
+        data: { id: `stale-${userId}`, userId, tokenHash: 'x', expiresAt: new Date(Date.now() - 1000) }, // already expired
+      });
+
+      await post('/api/v1/auth/login', { email: e, password });
+      const live = await prisma.refreshToken.count({ where: { userId, revokedAt: null, expiresAt: { gt: new Date() } } });
+      expect(live).toBeLessThanOrEqual(20);
+      expect(await prisma.refreshToken.count({ where: { id: `stale-${userId}` } })).toBe(0);
+    });
+
+    it('rejects old-format tokens (no jti), tampered tokens, and tokens for other users', async () => {
+      const userId = await userIdOf(email);
+      const legacy = await new SignJWT({}).setProtectedHeader({ alg: 'HS256' }).setSubject(userId).setIssuedAt().setExpirationTime('7d').sign(secret());
+      expect((await post('/api/v1/auth/refresh', undefined, legacy)).statusCode).toBe(401);
+
+      // A validly-signed token that reuses a real row's jti but isn't the token that was issued.
+      const real = refreshCookie(await post('/api/v1/auth/login', { email, password: 'second-password-2' }))!;
+      const jti = JSON.parse(Buffer.from(real.split('.')[1]!, 'base64url').toString()).jti as string;
+      const forged = await new SignJWT({ x: 1 }).setProtectedHeader({ alg: 'HS256' }).setJti(jti).setSubject(userId).setIssuedAt().setExpirationTime('7d').sign(secret());
+      expect((await post('/api/v1/auth/refresh', undefined, forged)).statusCode).toBe(401);
+
+      // Someone else's id on a real jti.
+      const other = await new SignJWT({}).setProtectedHeader({ alg: 'HS256' }).setJti(jti).setSubject(await userIdOf(ACCOUNTS.customer2)).setIssuedAt().setExpirationTime('7d').sign(secret());
+      expect((await post('/api/v1/auth/refresh', undefined, other)).statusCode).toBe(401);
+
+      expect((await post('/api/v1/auth/refresh', undefined, real)).statusCode).toBe(200); // the genuine one still works
+    });
+  });
+
   describe('deactivated accounts', () => {
     it('cannot log in, cannot refresh, and cannot act even with a still-valid access token', async () => {
       const owner = await login(app, ACCOUNTS.owner);
@@ -171,7 +237,8 @@ describeDb('authentication (needs TEST_DATABASE_URL)', () => {
       expect(await perms(ACCOUNTS.delivery1)).toEqual(['delivery.fulfill']);
       expect(await perms(ACCOUNTS.staffOrders)).toEqual(['orders.manage', 'orders.view']);
       expect(await perms(ACCOUNTS.staffMenu)).toEqual(['delivery.assign', 'menu.manage', 'orders.manage', 'orders.view']);
-      expect((await perms(ACCOUNTS.owner)).length).toBe(8);
+      expect(await perms(ACCOUNTS.staffSupport)).toEqual(['orders.view', 'support.manage']);
+      expect((await perms(ACCOUNTS.owner)).length).toBe(9);
     });
   });
 });

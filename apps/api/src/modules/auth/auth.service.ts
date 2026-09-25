@@ -1,10 +1,10 @@
 import argon2 from 'argon2';
-import { randomUUID } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { trace } from '@opentelemetry/api';
 import { ROLES, type RegisterInput, type LoginInput } from '@foodbowl/shared';
 import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/tokens';
+import { hashRefreshToken, signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/tokens';
 import { getEffectivePermissions } from '../../lib/rbac';
 
 const tracer = trace.getTracer('foodbowl-api');
@@ -103,34 +103,69 @@ export async function login(input: LoginInput) {
   });
 }
 
+/** One person can be signed in on several devices, but not without limit. */
+const MAX_LIVE_SESSIONS = 20;
+const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 async function issueRefreshToken(userId: string): Promise<string> {
-  const token = await signRefreshToken(userId);
-  const tokenHash = await argon2.hash(token);
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  await prisma.refreshToken.create({ data: { id: randomUUID(), userId, tokenHash, expiresAt } });
+  const { token, jti } = await signRefreshToken(userId);
+  const now = new Date();
+  await prisma.refreshToken.create({
+    data: { id: jti, userId, tokenHash: hashRefreshToken(token), expiresAt: new Date(now.getTime() + REFRESH_TTL_MS) },
+  });
+  await pruneSessions(userId, now);
   return token;
 }
 
+/**
+ * Keeps the table from growing forever: drops tokens that are expired or were
+ * revoked more than a day ago, and if someone somehow has more than
+ * MAX_LIVE_SESSIONS devices signed in, signs out the oldest ones.
+ */
+async function pruneSessions(userId: string, now: Date) {
+  await prisma.refreshToken.deleteMany({
+    where: { userId, OR: [{ expiresAt: { lt: now } }, { revokedAt: { lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } }] },
+  });
+  const live = await prisma.refreshToken.findMany({
+    where: { userId, revokedAt: null },
+    orderBy: { createdAt: 'desc' },
+    skip: MAX_LIVE_SESSIONS,
+    select: { id: true },
+  });
+  if (live.length > 0) {
+    await prisma.refreshToken.updateMany({ where: { id: { in: live.map((t) => t.id) } }, data: { revokedAt: now } });
+  }
+}
+
 export async function refresh(refreshToken: string) {
-  const { sub: userId } = await verifyRefreshToken(refreshToken).catch(() => {
+  const claims = await verifyRefreshToken(refreshToken).catch(() => {
     throw new AuthError('Invalid refresh token', 401);
   });
 
-  const candidates = await prisma.refreshToken.findMany({
-    where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
-  });
-  const match = await Promise.any(
-    candidates.map(async (c) => ((await argon2.verify(c.tokenHash, refreshToken)) ? c : Promise.reject())),
-  ).catch(() => undefined);
-  if (!match) throw new AuthError('Invalid refresh token', 401);
+  const row = await prisma.refreshToken.findUnique({ where: { id: claims.jti } });
+  const presented = Buffer.from(hashRefreshToken(refreshToken));
+  const stored = Buffer.from(row?.tokenHash ?? '');
+  if (
+    !row ||
+    row.userId !== claims.sub ||
+    row.revokedAt !== null ||
+    row.expiresAt <= new Date() ||
+    presented.length !== stored.length ||
+    !timingSafeEqual(presented, stored)
+  ) {
+    throw new AuthError('Invalid refresh token', 401);
+  }
 
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { role: true } });
+  // Redeem it atomically: if two requests present the same cookie at once,
+  // exactly one wins (the other sees count 0) — a token can't be spent twice.
+  const { count } = await prisma.refreshToken.updateMany({ where: { id: row.id, revokedAt: null }, data: { revokedAt: new Date() } });
+  if (count !== 1) throw new AuthError('Invalid refresh token', 401);
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: claims.sub }, include: { role: true } });
   if (!user.isActive) throw new AuthError('Account deactivated', 403);
 
-  // rotate: revoke the used token, issue a new one
-  await prisma.refreshToken.update({ where: { id: match.id }, data: { revokedAt: new Date() } });
-  const newRefreshToken = await issueRefreshToken(userId);
-  const { accessToken, permissions } = await buildAuthPayload(userId, user.role.key, user.permVersion);
+  const newRefreshToken = await issueRefreshToken(user.id);
+  const { accessToken, permissions } = await buildAuthPayload(user.id, user.role.key, user.permVersion);
 
   return {
     accessToken,

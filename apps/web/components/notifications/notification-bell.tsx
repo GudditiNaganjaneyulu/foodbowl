@@ -22,6 +22,12 @@ import { cn } from '@/lib/utils';
 
 /** Where clicking a notification should take this user. */
 function targetFor(role: string, n: NotificationDTO): string | null {
+  const ticketId = typeof n.metadata.ticketId === 'string' ? n.metadata.ticketId : null;
+  if (ticketId) {
+    if (role === 'restaurant_owner') return `/admin/support?ticket=${ticketId}`;
+    if (role === 'staff') return `/staff/support?ticket=${ticketId}`;
+    return `/support/${ticketId}`;
+  }
   const orderId = typeof n.metadata.orderId === 'string' ? n.metadata.orderId : null;
   if (!orderId) return null;
   switch (role) {

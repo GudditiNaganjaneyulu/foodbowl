@@ -122,3 +122,21 @@ Deploys are just `git reset --hard origin/main` + rebuild, so rolling back is
 the same shape: SSH in, `git reset --hard <previous-sha>`, and rerun the four
 `docker compose` commands from step 4 (skip `db:deploy` unless the rollback
 also needs a migration reverted, which Prisma doesn't do automatically).
+
+## Upgrading an existing deployment
+
+A release can change the database and the permission list, so after pulling new code run these against the production database (in this order):
+
+```bash
+pnpm --filter @foodbowl/api db:deploy      # apply new migrations (prisma migrate deploy)
+pnpm --filter @foodbowl/api db:sync-rbac   # bring roles/permissions up to date — no demo data
+```
+
+`db:sync-rbac` is what gives the owner a newly introduced permission such as `support.manage`; skip it and the owner (and any staff you grant it to) will get 403s on the new screens. Add both to `.github/workflows/deploy.yml` after the build step if you deploy through it.
+
+Things to know:
+
+- **Everyone signs in again once** after the release that changed refresh tokens (old tokens can't be looked up by ID). Nothing is lost.
+- **Photos:** with Supabase configured they need no deployment step. Without it, uploads are written to `UPLOAD_DIR` (default `./uploads` inside the API container) — mount a volume there or they disappear whenever the container is recreated.
+- **Seed data is for demos.** Run `pnpm db:seed` on a fresh environment if you want the sample menu and accounts; it is safe to re-run (matched by name) but you will want to change the default password immediately.
+- **Set `WEB_ORIGIN`** to exactly the web address customers use (scheme, host and port) or the browser blocks API calls; and behind a reverse proxy set `PUBLIC_API_URL` so built-in-storage upload links point at the public address.

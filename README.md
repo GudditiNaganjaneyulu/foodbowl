@@ -2,20 +2,23 @@
 
 A single-restaurant food-ordering platform (Swiggy/Zomato-style UX, one restaurant) — built as a learning/testing project. See [BUILD_PROMPT.md](./BUILD_PROMPT.md) for the full spec this repo is built from (architecture, RBAC model, DB schema, API surface, build order), and **[docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md) for the full setup + default-login + troubleshooting reference** — this README is the condensed version.
 
-## Status
+## What's built
 
-Milestone 1–2 scaffolding is in place:
+**Customers**
+- Menu with real dish photos: category sidebar + photo cards on desktop, photo-right rows with an overlapping ADD button on phones; veg/non-veg marks, search, item customization sheet (size, spice level, add-ons) with special instructions
+- Server-backed cart that follows you across devices (guest cart merges on login), saved delivery addresses, checkout (cash on delivery) with delivery instructions, live order tracking with a status timeline, cancellation before the kitchen starts
+- Profile editing and a first-run checklist (phone + address); customer support conversations with the restaurant, optionally about a specific order; in-app notifications
 
-- ✅ Monorepo structure (`apps/api`, `apps/web`, `packages/shared`)
-- ✅ Prisma schema (full RBAC + menu + order + delivery + notification model)
-- ✅ Auth (register/login/refresh/logout, JWT access + rotated refresh tokens)
-- ✅ RBAC (`role.rolePermissions` + `user.userPermissions` overrides, `requirePermission` guard)
-- ✅ **User Management UI** — `/admin/users`: add/deactivate users, assign roles, grant/revoke staff permissions (owner-only, see BUILD_PROMPT.md §3.4)
-- ✅ Public menu browse (read API + themed storefront UI)
-- ✅ OpenTelemetry tracing + pino logging bootstrap, local Jaeger for viewing traces
-- ✅ Theme architecture — CSS-variable design tokens, light/dark mode, mobile-first Swiggy/Zomato-inspired storefront (bottom tab nav, sticky cart bar, veg/non-veg indicators, jump-to category chips)
-- ✅ Upstash Redis (optional, free tier) — rate limiting on login/register/password-change, response caching on the public menu endpoint; app works fine with neither configured
-- ⬜ Cart/order placement, order lifecycle + Socket.IO, delivery workflow, notifications — next milestones (see BUILD_PROMPT.md §14)
+**Restaurant** (each role gets only what it's permitted to do)
+- Owner: overview with revenue and best sellers, live order queue, menu manager (photos, options, availability), restaurant settings (open/closed, fee, minimum), user management with per-person permissions
+- Kitchen staff: live kanban queue with one-tap next steps, special-instruction flags
+- Dispatch: offer orders to delivery partners, see who has what
+- Support agents: shared inbox with filters/search, reply, internal notes, assign to a colleague, resolve — all live
+- Delivery partners: offers, accept/decline, pickup, and a delivered flow that requires confirming cash and takes a **proof-of-delivery photo** (camera on phones) shown to the customer and staff
+
+**Under the hood** — Fastify + Prisma/Postgres API with RBAC, OpenTelemetry tracing, Socket.IO live updates, Swagger docs at `/docs`; Next.js frontend; Supabase Storage for photos with a built-in disk fallback; **fully responsive** (every main screen is checked at phone width); 160+ automated API tests plus a five-browser end-to-end journey.
+
+Not built (v1 non-goals, see BUILD_PROMPT.md §15): online payments, multi-restaurant, real push notifications, automatic delivery dispatch.
 
 ## Local Development
 
@@ -79,8 +82,9 @@ The seed script creates one account per role, all on the same default password b
 | Role | Email | Password | Dashboard URL |
 |---|---|---|---|
 | Restaurant owner ("super admin") | `owner@foodbowl.local` | `Password123!` | [localhost:3000/admin](http://localhost:3000/admin) |
-| Staff (orders.manage only) | `staff.orders@foodbowl.local` | `Password123!` | [localhost:3000/staff](http://localhost:3000/staff) |
+| Staff (kitchen: orders.manage) | `staff.orders@foodbowl.local` | `Password123!` | [localhost:3000/staff](http://localhost:3000/staff) |
 | Staff (+ menu.manage, delivery.assign) | `staff.menu@foodbowl.local` | `Password123!` | [localhost:3000/staff](http://localhost:3000/staff) |
+| Staff (+ support.manage) | `staff.support@foodbowl.local` | `Password123!` | [localhost:3000/staff/support](http://localhost:3000/staff/support) |
 | Delivery partner | `delivery1@foodbowl.local` / `delivery2@foodbowl.local` | `Password123!` | [localhost:3000/delivery](http://localhost:3000/delivery) |
 | Customer | `customer1@foodbowl.local` / `customer2@foodbowl.local` / `customer3@foodbowl.local` | `Password123!` | [localhost:3000](http://localhost:3000) |
 
@@ -93,8 +97,13 @@ See **[docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)** for what each seede
 - Storefront: [localhost:3000](http://localhost:3000)
 - Login: [localhost:3000/login](http://localhost:3000/login)
 - API health check: [localhost:4000/health](http://localhost:4000/health)
+- Help & support: [localhost:3000/support](http://localhost:3000/support) (customers) · `/staff/support` and `/admin/support` (agents)
 - API docs (Swagger UI): [localhost:4000/docs](http://localhost:4000/docs) — raw spec at `/docs/json`
 - Traces: [localhost:16686](http://localhost:16686)
+
+## Tests
+
+`pnpm --filter @foodbowl/api test` runs the unit tests; integration tests run when `TEST_DATABASE_URL` points at a throwaway database — setup in [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md#7-running-the-tests).
 
 ## Monorepo layout
 

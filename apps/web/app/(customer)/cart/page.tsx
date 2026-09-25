@@ -3,13 +3,15 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Minus, Plus, Plus as PlusIcon, ShoppingBag, Trash2 } from 'lucide-react';
+import { AlertTriangle, MessageSquareText, Minus, Plus, Plus as PlusIcon, ShoppingBag, Trash2 } from 'lucide-react';
 import type { AddressDTO, OrderDTO, RestaurantDTO } from '@foodbowl/shared';
 import { AddressForm } from '@/components/address/address-form';
+import { FoodImage } from '@/components/menu/food-image';
 import { VegIndicator } from '@/components/menu/veg-indicator';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toaster';
 import { apiClient, ApiError } from '@/lib/api-client';
@@ -18,11 +20,14 @@ import { useCart } from '@/lib/cart-context';
 import { addressLine, money } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
+const QUICK_NOTES = ['Leave at the door', "Don't ring the bell", 'Call when you arrive', 'No cutlery or napkins'];
+
 export default function CartPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
-  const { lines, subtotal, unavailableCount, ready, setQuantity, removeItem, refresh } = useCart();
+  const { lines, subtotal, unavailableCount, ready, setQuantity, removeItem, updateNote, refresh } = useCart();
+  const [editingNote, setEditingNote] = React.useState<{ id: string; text: string } | null>(null);
 
   const [restaurant, setRestaurant] = React.useState<RestaurantDTO | null>(null);
   const [addresses, setAddresses] = React.useState<AddressDTO[] | null>(null);
@@ -126,31 +131,88 @@ export default function CartPage() {
         <Card>
           <CardContent className="divide-y divide-border p-0">
             {lines.map((line) => (
-              <div key={line.lineId} className={cn('flex items-center gap-3 p-4', !line.available && 'bg-destructive/5')}>
-                <VegIndicator isVeg={line.isVeg} />
-                <div className="min-w-0 flex-1">
-                  <p className={cn('truncate font-medium', !line.available && 'text-muted-foreground line-through')}>{line.name}</p>
-                  {line.modifiers.length > 0 && (
-                    <p className="truncate text-xs text-muted-foreground">{line.modifiers.map((m) => m.name).join(', ')}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    {line.available ? money(line.price) : <span className="font-medium text-destructive">No longer available</span>}
-                  </p>
+              <div key={line.lineId} className={cn('flex flex-col gap-2 p-4', !line.available && 'bg-destructive/5')} data-testid="cart-line">
+                <div className="flex items-start gap-3">
+                  <FoodImage src={line.imageUrl} alt={line.name} className="h-16 w-16 shrink-0 rounded-lg sm:h-20 sm:w-20" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <VegIndicator isVeg={line.isVeg} />
+                      <p className={cn('truncate font-medium', !line.available && 'text-muted-foreground line-through')}>{line.name}</p>
+                    </div>
+                    {line.modifiers.length > 0 && (
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{line.modifiers.map((m) => m.name).join(', ')}</p>
+                    )}
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      {line.available ? money(line.price) : <span className="font-medium text-destructive">No longer available</span>}
+                    </p>
+                  </div>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive" onClick={() => removeItem(line.lineId)} aria-label="Remove item">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pl-[4.75rem] sm:pl-[5.75rem]">
+                  {line.available ? (
+                    <div className="flex items-center gap-2">
+                      <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setQuantity(line.lineId, line.quantity - 1)} aria-label="Decrease quantity">
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-5 text-center text-sm font-medium" data-testid="line-quantity">{line.quantity}</span>
+                      <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setQuantity(line.lineId, line.quantity + 1)} aria-label="Increase quantity">
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <span />
+                  )}
+                  {line.available && <span className="text-sm font-semibold tabular-nums">{money(line.price * line.quantity)}</span>}
+                </div>
+
                 {line.available && (
-                  <div className="flex items-center gap-2">
-                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => setQuantity(line.lineId, line.quantity - 1)} aria-label="Decrease quantity">
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="w-5 text-center text-sm font-medium" data-testid="line-quantity">{line.quantity}</span>
-                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => setQuantity(line.lineId, line.quantity + 1)} aria-label="Increase quantity">
-                      <Plus className="h-3 w-3" />
-                    </Button>
+                  <div className="pl-[4.75rem] sm:pl-[5.75rem]">
+                    {editingNote?.id === line.lineId ? (
+                      <form
+                        className="flex gap-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          updateNote(line.lineId, editingNote.text);
+                          setEditingNote(null);
+                        }}
+                      >
+                        <Input
+                          autoFocus
+                          aria-label={`Instructions for ${line.name}`}
+                          placeholder="e.g. no onions, extra spicy"
+                          maxLength={300}
+                          value={editingNote.text}
+                          onChange={(e) => setEditingNote({ id: line.lineId, text: e.target.value })}
+                          className="h-9"
+                        />
+                        <Button type="submit" size="sm" data-testid="save-line-note">Save</Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setEditingNote(null)}>Cancel</Button>
+                      </form>
+                    ) : line.note ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditingNote({ id: line.lineId, text: line.note ?? '' })}
+                        className="flex items-start gap-1.5 rounded bg-warning/10 px-2 py-1 text-left text-xs hover:bg-warning/20"
+                        data-testid="line-note"
+                      >
+                        <MessageSquareText className="mt-0.5 h-3 w-3 shrink-0" />
+                        <span>“{line.note}” <span className="text-muted-foreground underline">Edit</span></span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingNote({ id: line.lineId, text: '' })}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        data-testid="add-line-note"
+                      >
+                        <MessageSquareText className="h-3 w-3" /> Add instructions
+                      </button>
+                    )}
                   </div>
                 )}
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => removeItem(line.lineId)} aria-label="Remove item">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
               </div>
             ))}
           </CardContent>
@@ -210,11 +272,30 @@ export default function CartPage() {
                 </div>
               )}
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <label htmlFor="order-notes" className="text-sm font-medium">
-                  Note for the restaurant <span className="font-normal text-muted-foreground">(optional)</span>
+                  Instructions for the restaurant &amp; delivery <span className="font-normal text-muted-foreground">(optional)</span>
                 </label>
-                <Textarea id="order-notes" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, gate code, ring the bell…" />
+                <div className="flex flex-wrap gap-1.5" data-testid="quick-notes">
+                  {QUICK_NOTES.map((phrase) => {
+                    const on = notes.includes(phrase);
+                    return (
+                      <button
+                        key={phrase}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setNotes((n) => (on ? n.replace(phrase, '').replace(/\s{2,}/g, ' ').replace(/^[\s.]+|[\s.]+$/g, '') : [n.trim().replace(/[.\s]+$/, ''), phrase].filter(Boolean).join('. ')))}
+                        className={cn(
+                          'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                          on ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {phrase}
+                      </button>
+                    );
+                  })}
+                </div>
+                <Textarea id="order-notes" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, gate code, where to leave it…" />
               </div>
             </CardContent>
           </Card>

@@ -4,11 +4,15 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: api
-    ports:
-      - "4000:4000"
     env_file:
       - ./.env
     restart: unless-stopped
+
+    # Keep API private.
+    # Nginx is the only public entry point.
+    ports:
+      - "127.0.0.1:4000:4000"
+
     healthcheck:
       test:
         [
@@ -21,6 +25,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
     networks:
       - app-network
 
@@ -29,15 +34,40 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     container_name: web
-    ports:
-      - "80:3000"
+
+    # Nginx accesses web through the Docker network,
+    # so this does not need to be publicly exposed.
+    expose:
+      - "3000"
+
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-      NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_SOCKET_URL: /socket
+
     depends_on:
       api:
         condition: service_healthy
+
     restart: unless-stopped
+
+    networks:
+      - app-network
+
+  nginx:
+    build:
+      context: .
+      dockerfile: apps/nginx/Dockerfile
+    container_name: nginx
+
+    ports:
+      - "80:80"
+
+    depends_on:
+      - web
+      - api
+
+    restart: unless-stopped
+
     networks:
       - app-network
 

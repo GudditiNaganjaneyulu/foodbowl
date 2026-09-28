@@ -8,10 +8,8 @@ services:
       - ./.env
     restart: unless-stopped
 
-    # Keep API private.
-    # Nginx is the only public entry point.
     ports:
-      - "127.0.0.1:4000:4000"
+      - "4000:4000"
 
     healthcheck:
       test:
@@ -33,16 +31,16 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      # NEXT_PUBLIC_* are inlined into the browser bundle at build time, so they
+      # must be build args (a runtime `environment:` value is ignored). They must
+      # be the address the *browser* uses to reach the API, e.g. http://<vm-ip>:4000.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://localhost:4000}
     container_name: web
 
-    # Nginx accesses web through the Docker network,
-    # so this does not need to be publicly exposed.
-    expose:
+    ports:
       - "3000:3000"
-
-    environment:
-      NEXT_PUBLIC_API_URL: /api
-      NEXT_PUBLIC_SOCKET_URL: /socket
 
     depends_on:
       api:
@@ -52,24 +50,6 @@ services:
 
     networks:
       - app-network
-
-  # nginx:
-  #   build:
-  #     context: .
-  #     dockerfile: apps/nginx/Dockerfile
-  #   container_name: nginx
-
-  #   ports:
-  #     - "80:80"
-
-  #   depends_on:
-  #     - web
-  #     - api
-
-  #   restart: unless-stopped
-
-  #   networks:
-  #     - app-network
 
 networks:
   app-network:

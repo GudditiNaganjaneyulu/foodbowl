@@ -38,7 +38,7 @@ services:
     # Nginx accesses web through the Docker network,
     # so this does not need to be publicly exposed.
     expose:
-      - "3000"
+      - "3000:3000"
 
     environment:
       NEXT_PUBLIC_API_URL: /api
@@ -53,23 +53,23 @@ services:
     networks:
       - app-network
 
-  nginx:
-    build:
-      context: .
-      dockerfile: apps/nginx/Dockerfile
-    container_name: nginx
+  # nginx:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/nginx/Dockerfile
+  #   container_name: nginx
 
-    ports:
-      - "80:80"
+  #   ports:
+  #     - "80:80"
 
-    depends_on:
-      - web
-      - api
+  #   depends_on:
+  #     - web
+  #     - api
 
-    restart: unless-stopped
+  #   restart: unless-stopped
 
-    networks:
-      - app-network
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:

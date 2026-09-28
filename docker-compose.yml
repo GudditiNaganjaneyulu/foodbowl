@@ -21,6 +21,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - app-network
 
   web:
     build:
@@ -36,3 +38,5 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - app-network

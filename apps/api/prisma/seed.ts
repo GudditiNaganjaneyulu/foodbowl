@@ -309,10 +309,60 @@ async function main() {
         modifierGroups: [multi('Extra chutneys', [['Tomato chutney', 0.5], ['Mint chutney', 0.5]])] },
       { name: 'Idli Sambar (3 pc)', price: 5.49, isVeg: true, image: 'idli-sambar',
         description: 'Steamed, fluffy rice cakes with lentil sambar and coconut chutney.' },
+      { name: 'Medu Vada (2 pc)', price: 4.49, isVeg: true, image: 'vada',
+        description: 'Crisp, doughnut-shaped lentil fritters with a soft centre, served with sambar and coconut chutney.' },
+      { name: 'Upma', price: 4.29, isVeg: true, image: 'upma',
+        description: 'Semolina simmered with mustard seeds, curry leaves, ginger and vegetables into a savoury porridge.' },
+      { name: 'Ven Pongal', price: 4.99, isVeg: true, image: 'pongal',
+        description: 'Rice and moong dal slow-cooked with ghee, cumin, pepper and cashews into a comforting porridge.' },
+      { name: 'Poori (2 pc)', price: 5.49, isVeg: true, image: 'poori',
+        description: 'Puffed, deep-fried wheat bread served hot with potato masala.',
+        modifierGroups: [multi('Add-ons', [['Extra poori', 1.5], ['Extra potato masala', 1]])] },
+      { name: 'Pesarattu', price: 5.99, isVeg: true, image: 'pesarattu',
+        description: 'A savoury green-gram crêpe from Andhra Pradesh, crisp at the edges, served with ginger chutney.' },
+    ] },
+    { name: 'Lunch', items: [
+      { name: 'Rice & Sambar', price: 8.49, isVeg: true, image: 'rice-sambar',
+        description: 'Steamed rice ladled with a tangy lentil-and-vegetable sambar.' },
+      { name: 'Rice & Rasam', price: 7.99, isVeg: true, image: 'rice-rasam',
+        description: 'Steamed rice with a peppery, tamarind-spiced rasam — light and warming.' },
+      { name: 'Dal Rice', price: 8.49, isVeg: true, image: 'dal-rice',
+        description: 'Steamed rice with home-style tadka dal, finished with a spoon of ghee.' },
+      { name: 'Curd Rice', price: 7.49, isVeg: true, image: 'curd-rice',
+        description: 'Rice folded into fresh yoghurt and tempered with mustard seeds and curry leaves — the classic cooling finish to a meal.' },
+      { name: 'Lemon Rice', price: 7.99, isVeg: true, image: 'lemon-rice',
+        description: 'Rice tossed with turmeric, roasted peanuts, curry leaves and a bright squeeze of lemon.' },
+      { name: 'Pulihora', price: 8.49, isVeg: true, image: 'pulihora',
+        description: 'Tangy tamarind rice tempered with peanuts, curry leaves and mustard seeds.' },
+      { name: 'Bisibele Bath', price: 9.49, isVeg: true, image: 'bisibele-bath',
+        description: 'A Karnataka classic: rice and lentils simmered with vegetables and a fragrant spice blend into one hearty pot.' },
+      { name: 'Veg Meals', price: 10.99, isVeg: true, image: 'veg-meals',
+        description: 'The full South Indian thali: rice with sambar, rasam, curd, a vegetable poriyal and pickle, served on a banana leaf.',
+        modifierGroups: [multi('Add-ons', [['Extra rice', 1], ['Papad', 0.5], ['Sweet', 1.5]])] },
+    ] },
+    { name: 'Dinner', items: [
+      { name: 'Dosa', price: 4.99, isVeg: true, image: 'dosa',
+        description: 'A large, crisp fermented rice-and-lentil crêpe, served plain with sambar and coconut chutney.' },
+      { name: 'Idli (2 pc)', price: 4.49, isVeg: true, image: 'idli-sambar',
+        description: 'Steamed, pillow-soft rice cakes served with sambar and coconut chutney.' },
+      { name: 'Chapati & Kurma', price: 8.49, isVeg: true, image: 'chapati-kurma',
+        description: 'Soft wheat flatbreads with a mildly spiced mixed-vegetable coconut kurma.' },
+      { name: 'Appam & Veg Stew', price: 8.99, isVeg: true, image: 'appam-veg-stew',
+        description: 'Lacy, bowl-shaped rice-and-coconut pancakes with a mild coconut-milk vegetable stew.' },
+      { name: 'Pesarattu', price: 5.99, isVeg: true, image: 'pesarattu',
+        description: 'A savoury green-gram crêpe from Andhra Pradesh, crisp at the edges, served with ginger chutney.' },
+      { name: 'Uttapam', price: 6.49, isVeg: true, image: 'uttapam',
+        description: 'A thick, savoury rice-and-lentil pancake topped with onion, tomato and chilli.' },
+      { name: 'Parotta & Kurma', price: 8.99, isVeg: true, image: 'parotta-kurma',
+        description: 'Flaky, layered South Indian parotta with a spiced vegetable kurma.' },
+      { name: 'Veg Biryani', price: 11.49, isVeg: true, image: 'veg-biryani',
+        description: 'Basmati rice layered with mixed vegetables and whole spices, slow-cooked dum style.',
+        modifierGroups: [single('Spice Level', [['Mild', 0], ['Medium', 0], ['Hot', 0]])] },
     ] },
   ];
-  // Where each category sits in the menu. Breakfast leads; the rest keep their original order.
-  const categorySort: Record<string, number> = { Breakfast: -1 };
+  // Where each category sits in the menu: Breakfast, Lunch and Dinner lead in that
+  // order (by meal time), the rest keep their original order.
+  const categorySort: Record<string, number> = { Breakfast: -3, Lunch: -2, Dinner: -1 };
 
   const seededItems: { id: string; price: number; name: string }[] = [];
   for (const [i, cat] of categoryDefs.entries()) {
@@ -324,6 +374,13 @@ async function main() {
       (await prisma.category.create({
         data: { id: `seed-cat-${i}`, restaurantId: restaurant.id, name: cat.name, sortOrder: categorySort[cat.name] ?? i },
       }));
+    // categorySort only applies at creation above, so a category seeded before an
+    // override was added (or moved here from a later position) would otherwise
+    // keep its stale position forever. Sync it — this is our own ordering intent
+    // for our own named categories, not something an owner sets by hand.
+    if (existingCategory && categorySort[cat.name] !== undefined && existingCategory.sortOrder !== categorySort[cat.name]) {
+      await prisma.category.update({ where: { id: category.id }, data: { sortOrder: categorySort[cat.name] } });
+    }
 
     for (const [j, item] of cat.items.entries()) {
       const existingItem = await prisma.menuItem.findFirst({ where: { categoryId: category.id, name: item.name } });

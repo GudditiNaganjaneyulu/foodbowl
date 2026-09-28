@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { trace } from '@opentelemetry/api';
 import {
   createCategorySchema,
   createMenuItemSchema,
@@ -14,6 +15,7 @@ import { requirePermission } from '../../lib/rbac';
 import { prisma } from '../../db/prisma';
 import { redis } from '../../lib/redis';
 import { logger } from '../../lib/logger';
+import { meter, withSpan } from '../../lib/otel';
 import {
   adminMenuDocs,
   createCategoryDocs,
@@ -28,6 +30,20 @@ import {
 
 const MENU_CACHE_KEY = 'menu:public';
 const MENU_CACHE_TTL_SECONDS = 60;
+
+// Metrics for the customer-facing menu browse — the one endpoint every demo
+// dish (mock data) actually gets served through. Counters/histograms export
+// via the same OTLP pipeline as traces (see lib/tracing.ts, lib/otel.ts).
+const menuListRequests = meter.createCounter('menu.list.requests', {
+  description: 'GET /api/v1/menu calls, by whether the response came from cache',
+});
+const menuListDuration = meter.createHistogram('menu.list.duration', {
+  description: 'Time to build the public menu response',
+  unit: 'ms',
+});
+const menuItemsServed = meter.createCounter('menu.items.served', {
+  description: 'Menu items returned to customers, by category',
+});
 
 async function invalidateMenuCache() {
   if (!redis) return;
@@ -46,34 +62,59 @@ export default async function menuRoutes(fastify: FastifyInstance) {
   // short TTL. Every mutating route below invalidates it explicitly too, so
   // edits show up immediately rather than waiting out the TTL.
   fastify.get('/', { schema: getMenuDocs }, async () => {
-    if (redis) {
-      try {
-        const cached = await redis.get(MENU_CACHE_KEY);
-        if (cached) return cached;
-      } catch (err) {
-        logger.warn({ err }, 'menu cache read failed, falling back to the database');
+    const startedAt = Date.now();
+    let cacheHit = false;
+
+    const result = await withSpan('menu.list', {}, async () => {
+      if (redis) {
+        try {
+          const cached = await redis.get(MENU_CACHE_KEY);
+          if (cached) {
+            cacheHit = true;
+            trace.getActiveSpan()?.setAttribute('menu.cache_hit', true);
+            return cached;
+          }
+        } catch (err) {
+          logger.warn({ err }, 'menu cache read failed, falling back to the database');
+        }
       }
-    }
 
-    const categories = await prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      include: {
-        menuItems: {
-          where: { isAvailable: true },
-          orderBy: { sortOrder: 'asc' },
-          include: { modifierGroups: { include: { modifiers: true } } },
+      const categories = await prisma.category.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          menuItems: {
+            where: { isAvailable: true },
+            orderBy: { sortOrder: 'asc' },
+            include: { modifierGroups: { include: { modifiers: true } } },
+          },
         },
-      },
-    });
-    const result = moneyStrings({ categories });
-
-    if (redis) {
-      redis.set(MENU_CACHE_KEY, result, { ex: MENU_CACHE_TTL_SECONDS }).catch((err) => {
-        logger.warn({ err }, 'menu cache write failed — reads will just keep hitting the database');
       });
-    }
+      const built = moneyStrings({ categories });
 
+      trace.getActiveSpan()?.setAttributes({
+        'menu.cache_hit': false,
+        'menu.category_count': categories.length,
+        'menu.item_count': categories.reduce((n, c) => n + c.menuItems.length, 0),
+      });
+      // Only counted on a cache miss (items served from a cache hit don't get
+      // re-parsed here) — still enough to see which categories get built/viewed;
+      // menuListRequests below covers overall traffic including cache hits.
+      for (const c of categories) {
+        if (c.menuItems.length) menuItemsServed.add(c.menuItems.length, { category: c.name });
+      }
+
+      if (redis) {
+        redis.set(MENU_CACHE_KEY, built, { ex: MENU_CACHE_TTL_SECONDS }).catch((err) => {
+          logger.warn({ err }, 'menu cache write failed — reads will just keep hitting the database');
+        });
+      }
+
+      return built;
+    });
+
+    menuListRequests.add(1, { cache_hit: cacheHit });
+    menuListDuration.record(Date.now() - startedAt, { cache_hit: cacheHit });
     return result;
   });
 

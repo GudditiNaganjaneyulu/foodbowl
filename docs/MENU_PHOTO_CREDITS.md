@@ -30,3 +30,22 @@ If the bucket is ever emptied, the "Photo" column links to each original so it c
 | `palak-paneer.jpg` | [Palak Paneer (Cottage cheese in spinach gravy).jpg](https://commons.wikimedia.org/wiki/File:Palak_Paneer_(Cottage_cheese_in_spinach_gravy).jpg) | DreamyFlutura11 | CC BY-SA 4.0 |
 | `butter-naan.jpg` | [Butter Naan 2.jpg](https://commons.wikimedia.org/wiki/File:Butter_Naan_2.jpg) | Ganesh Mohan T | CC BY-SA 4.0 |
 | `sweet-lassi.jpg` | [Lassi 1.jpg](https://commons.wikimedia.org/wiki/File:Lassi_1.jpg) | Gaurav Dhwaj Khadka | CC BY-SA 4.0 |
+| `dosa.jpg` | [Dosa 1.JPG](https://commons.wikimedia.org/wiki/File:Dosa_1.JPG) | United Hotel Management Academy | CC BY-SA 4.0 |
+| `vada.jpg` | [Medu Vada.JPG](https://commons.wikimedia.org/wiki/File:Medu_Vada.JPG) | Lubnakarim06 | CC BY-SA 4.0 |
+| `upma.jpg` | [Upma.jpg](https://commons.wikimedia.org/wiki/File:Upma.jpg) | stu_spivack | CC BY-SA 2.0 |
+| `pongal.jpg` | [Pongal Dish.JPG](https://commons.wikimedia.org/wiki/File:Pongal_Dish.JPG) | BennyWikipedian | Public domain |
+| `poori.jpg` | [Poori or Puri.JPG](https://commons.wikimedia.org/wiki/File:Poori_or_Puri.JPG) | SnapMeUp | CC BY-SA 4.0 |
+| `pesarattu.jpg` | [MLA Pesarattu.JPG](https://commons.wikimedia.org/wiki/File:MLA_Pesarattu.JPG) | Jit.roy.chowdhury | CC BY-SA 4.0 |
+| `rice-sambar.jpg` | [Sambar Rice.jpg](https://commons.wikimedia.org/wiki/File:Sambar_Rice.jpg) | Rashmiwalia85 | CC BY-SA 4.0 |
+| `rice-rasam.jpg` | [Rasam.JPG](https://commons.wikimedia.org/wiki/File:Rasam.JPG) | Miansari66 | Public domain |
+| `dal-rice.jpg` | [Dal Fry Tadka, Cumin Rice, Roasted Papad on the side.jpg](<https://commons.wikimedia.org/wiki/File:Dal_Fry_Tadka,_Cumin_Rice,_Roasted_Papad_on_the_side.jpg>) | Monali.mishra | CC BY-SA 4.0 |
+| `curd-rice.jpg` | [Curd Rice.jpg](https://commons.wikimedia.org/wiki/File:Curd_Rice.jpg) | Sudharshan Shanmugasundaram | CC BY-SA 4.0 |
+| `lemon-rice.jpg` | [Chitranna (Lemon Rice) prepared by an indian woman.jpg](<https://commons.wikimedia.org/wiki/File:Chitranna_(Lemon_Rice)_prepared_by_an_indian_woman.jpg>) | Dahivada | GFDL |
+| `pulihora.jpg` | [Andhra Pulihora.jpg](https://commons.wikimedia.org/wiki/File:Andhra_Pulihora.jpg) | Korikana jagadeesh | CC BY-SA 4.0 |
+| `bisibele-bath.jpg` | [Bisi Bele Bath.jpg](https://commons.wikimedia.org/wiki/File:Bisi_Bele_Bath.jpg) | Devika.pujari | CC0 |
+| `veg-meals.jpg` | [A Thali, famous South Indian meal served on a banana leaf.jpg](<https://commons.wikimedia.org/wiki/File:A_Thali,_famous_South_Indian_meal_served_on_a_banana_leaf.jpg>) | Melanie M | CC BY 2.0 |
+| `chapati-kurma.jpg` | [Chapati2.JPG](https://commons.wikimedia.org/wiki/File:Chapati2.JPG) | Randhirreddy | Public domain |
+| `appam-veg-stew.jpg` | [GKN Appam Veg Stew DSC 1292.JPG](https://commons.wikimedia.org/wiki/File:GKN_Appam_Veg_Stew_DSC_1292.JPG) | Pranchiyettan | CC BY-SA 2.5 |
+| `uttapam.jpg` | [Uttapam.jpg](https://commons.wikimedia.org/wiki/File:Uttapam.jpg) | Jagadish Uttarakabata | CC BY-SA 3.0 |
+| `parotta-kurma.jpg` | [Bun parotta.jpg](https://commons.wikimedia.org/wiki/File:Bun_parotta.jpg) | Muthusabari ms | CC BY-SA 4.0 |
+| `veg-biryani.jpg` | [Veg Kaju Biryani.jpg](https://commons.wikimedia.org/wiki/File:Veg_Kaju_Biryani.jpg) | Karan Aggarwal | CC BY-SA 4.0 |

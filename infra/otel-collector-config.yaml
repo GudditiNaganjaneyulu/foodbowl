@@ -25,3 +25,11 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      # Jaeger is traces-only, so metrics only go to the collector's own logs
+      # for now (`docker logs <otel-collector container>`). Add a `prometheus`
+      # exporter here (collector-contrib image) to scrape them from a real
+      # metrics backend instead — app code (lib/tracing.ts) never changes.
+      exporters: [debug]

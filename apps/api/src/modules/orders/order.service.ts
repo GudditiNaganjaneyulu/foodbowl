@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { SpanStatusCode, trace } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
 import {
   ORDER_STATUS,
   TERMINAL_STATUSES,
@@ -11,6 +11,7 @@ import { prisma } from '../../db/prisma';
 import { HttpError } from '../../lib/http-error';
 import { logger } from '../../lib/logger';
 import { fmt, ZERO } from '../../lib/money';
+import { withSpan } from '../../lib/otel';
 import { getPaymentProvider } from '../../lib/payment';
 import { getActor, type Actor } from '../../lib/rbac';
 import { cartInclude, priceCartLine } from '../cart/cart.service';
@@ -18,8 +19,6 @@ import { sumMoney } from '../cart/pricing';
 import { orderDetailInclude, orderInclude, toOrderDTO, type OrderDetailRow } from './order.dto';
 import { publishOrderPlaced, publishOrderUpdated } from './order.events';
 import { canViewOrder, authorizeTransition } from './order-rules';
-
-const tracer = trace.getTracer('foodbowl-api');
 
 const ACTIVE_STATUSES = Object.values(ORDER_STATUS).filter((s) => !TERMINAL_STATUSES.includes(s));
 
@@ -33,21 +32,6 @@ function isOrderNumberCollision(err: unknown): boolean {
     err.code === 'P2002' &&
     String(err.meta?.target ?? '').includes('orderNumber')
   );
-}
-
-/** Runs `fn` inside a span, recording failures on it, and always ends the span. */
-async function withSpan<T>(name: string, attributes: Record<string, string | number>, fn: () => Promise<T>) {
-  return tracer.startActiveSpan(name, { attributes }, async (span) => {
-    try {
-      return await fn();
-    } catch (err) {
-      span.recordException(err as Error);
-      span.setStatus({ code: SpanStatusCode.ERROR });
-      throw err;
-    } finally {
-      span.end();
-    }
-  });
 }
 
 // ── Placement ─────────────────────────────────────────────────────────────

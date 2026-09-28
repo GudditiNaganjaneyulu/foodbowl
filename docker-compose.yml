@@ -1,4 +1,34 @@
 services:
+  # Traces + metrics collection. This talks OTLP only, so swapping it (or the
+  # `jaeger` service below) for a real backend later — Honeycomb, Datadog,
+  # Grafana Cloud, self-hosted Tempo/Prometheus — is a config-only change:
+  # nothing in api/ has to know. See infra/otel-collector-config.yaml.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./infra/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    depends_on:
+      - jaeger
+    networks:
+      - app-network
+
+  # Local, free trace viewing (metrics currently just land in the collector's
+  # own logs — see infra/otel-collector-config.yaml). UI only; not something
+  # a customer's browser ever talks to, so only its UI port is published.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    container_name: jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+    networks:
+      - app-network
+
   api:
     build:
       context: .
@@ -6,6 +36,11 @@ services:
     container_name: api
     env_file:
       - ./.env
+    environment:
+      # Inside this network "localhost" is the api container itself, not
+      # otel-collector — override whatever OTEL_EXPORTER_OTLP_ENDPOINT is (or
+      # isn't) set to in .env, which is written for the non-Docker `pnpm dev` flow.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     restart: unless-stopped
 
     ports:
@@ -23,6 +58,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+    depends_on:
+      - otel-collector
 
     networks:
       - app-network

@@ -8,6 +8,10 @@ import type { PrismaClient } from '@prisma/client';
 export async function deleteSince(prisma: PrismaClient, since: Date) {
   await prisma.notification.deleteMany({ where: { createdAt: { gte: since } } });
   await prisma.auditLog.deleteMany({ where: { createdAt: { gte: since } } });
+  // Coupons reference their order by a plain string (sourceOrderId/usedOnOrderId,
+  // not a real FK — an order stays cancelled/redeemable-against forever even if
+  // the coupon itself is later deleted), so deleting the order doesn't cascade here.
+  await prisma.coupon.deleteMany({ where: { createdAt: { gte: since } } });
 }
 
 /**

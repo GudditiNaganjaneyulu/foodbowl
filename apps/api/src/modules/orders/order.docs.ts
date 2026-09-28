@@ -24,7 +24,7 @@ export const placeOrderDocs: FastifySchema = {
   tags: ['Orders'],
   summary: 'Place an order from my cart',
   description:
-    'Turns the current cart into an order (cash on delivery) in one transaction: re-prices every line from the current menu, **snapshots** names/prices/modifiers into the order, records the first status-log entry (`PLACED`), and empties the cart. Nothing is saved if any check fails. The restaurant queue receives a live `order:placed` event.',
+    'Turns the current cart into an order (cash on delivery) in one transaction: re-prices every line from the current menu, **snapshots** names/prices/modifiers into the order, records the first status-log entry (`PLACED`), and empties the cart. An optional `couponCode` (one of the caller\'s own, from `GET /coupons/me`) is validated and redeemed in the same transaction. Nothing is saved if any check fails. The restaurant queue receives a live `order:placed` event.',
   security: bearerAuth,
   body: fromZod(placeOrderSchema, { example: { addressId: 'seed-address-1', notes: 'Ring the bell twice' } }),
   response: {
@@ -32,7 +32,8 @@ export const placeOrderDocs: FastifySchema = {
     ...errorResponses({
       400: 'Validation failed, empty cart, unknown address, or below the minimum order.',
       ...unauthorized,
-      409: 'The restaurant is closed, or an item in the cart is no longer available.',
+      404: 'The coupon code does not belong to this customer.',
+      409: 'The restaurant is closed, an item in the cart is no longer available, or the coupon is already used/expired.',
     }),
   },
 };
@@ -106,12 +107,18 @@ export const cancelOrderDocs: FastifySchema = {
   tags: ['Orders'],
   summary: 'Cancel an order',
   description:
-    'A **customer** can cancel their own order only while it is `PLACED` or `CONFIRMED`. The **owner** or staff with `orders.manage` can cancel up to and including `PREPARING`. Cancelled orders are final.',
+    'A **customer** can cancel their own order only while it is `PLACED` or `CONFIRMED`. The **owner** or staff with `orders.manage` can cancel while it is `READY_FOR_PICKUP` or `OUT_FOR_DELIVERY` too (e.g. no delivery partner was ever available) — but not once a rider has actually accepted or picked it up (reject their assignment first, via the delivery endpoints). Cancelling from one of those two late states automatically issues the customer a 5%-off coupon (`issuedCoupon` below, also delivered as a notification) since the kitchen already made the food. Cancelled orders are final.',
   security: bearerAuth,
   params: idParam,
   body: fromZod(cancelOrderSchema, { example: { reason: 'Ordered by mistake' } }),
   response: {
-    200: orderResponse('The cancelled order.'),
+    200: {
+      description: 'The cancelled order, plus the coupon issued alongside it if this was a late (post-kitchen) cancellation.',
+      allOf: [
+        ref('Order'),
+        { type: 'object', properties: { issuedCoupon: { allOf: [ref('Coupon')], nullable: true } } },
+      ],
+    },
     ...errorResponses({
       400: 'Validation failed (a reason is required).',
       ...unauthorized,

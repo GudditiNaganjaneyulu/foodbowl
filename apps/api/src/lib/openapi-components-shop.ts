@@ -169,12 +169,17 @@ export const shopComponentSchemas: Record<string, JsonSchema> = {
       status: { type: 'string', enum: ORDER_STATUSES },
       subtotal: money('Items total.', '30.98'),
       deliveryFee: money('Delivery fee.', '2.50'),
-      discount: money('Discount (always 0 in v1).', '0.00'),
+      discount: money('Discount from a redeemed coupon, if any.', '0.00'),
+      couponCode: { type: 'string', nullable: true, description: 'The coupon redeemed for `discount`, if any.' },
       total: money('subtotal + deliveryFee − discount. Payable in cash on delivery.', '33.48'),
       paymentMethod: { type: 'string', enum: ['COD'] },
       paymentStatus: { type: 'string', enum: ['PENDING', 'COLLECTED'] },
       placedAt: timestamp('When the order was placed.'),
       deliveredAt: nullableTimestamp('When it was delivered.'),
+      selfDelivered: {
+        type: 'boolean',
+        description: 'True when staff/owner delivered this themselves (no delivery partner) — see POST /delivery/orders/{id}/self-deliver.',
+      },
       cancelledAt: nullableTimestamp('When it was cancelled.'),
       cancellationReason: { type: 'string', nullable: true },
       notes: { type: 'string', nullable: true },
@@ -214,6 +219,19 @@ export const shopComponentSchemas: Record<string, JsonSchema> = {
   DeliveryAssignment: {
     type: 'object',
     allOf: [ref('Delivery'), { type: 'object', properties: { order: ref('Order') } }],
+  },
+
+  Coupon: {
+    type: 'object',
+    properties: {
+      code: { type: 'string', example: 'SORRY482913' },
+      discountPercent: money('Percentage off the order subtotal.', '5.00'),
+      reason: { type: 'string', nullable: true, description: 'Why it was issued.' },
+      status: { type: 'string', enum: ['ACTIVE', 'USED', 'EXPIRED'] },
+      expiresAt: timestamp('After this, the coupon can no longer be redeemed.'),
+      usedAt: nullableTimestamp('When it was redeemed.'),
+      createdAt: timestamp('When it was issued.'),
+    },
   },
 
   DeliveryPartner: {

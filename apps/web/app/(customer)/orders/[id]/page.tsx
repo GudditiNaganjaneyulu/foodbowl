@@ -88,6 +88,12 @@ export default function OrderTrackingPage() {
         </CardContent>
       </Card>
 
+      {order.selfDelivered && (
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground">The restaurant delivered this order directly.</CardContent>
+        </Card>
+      )}
+
       {order.delivery && ['ACCEPTED', 'PICKED_UP'].includes(order.delivery.status) && (
         <Card>
           <CardContent className="flex items-center justify-between gap-3 p-4 text-sm">

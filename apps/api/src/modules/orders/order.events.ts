@@ -1,7 +1,7 @@
-import { REALTIME, type OrderDTO, type OrderStatus } from '@foodbowl/shared';
+import { REALTIME, type CouponDTO, type OrderDTO, type OrderStatus } from '@foodbowl/shared';
 import { emitToRooms } from '../../lib/realtime';
 import { logger } from '../../lib/logger';
-import { notifyOrderPlaced, notifyOrderTransition } from '../notifications/notification.events';
+import { notifyCouponIssued, notifyOrderPlaced, notifyOrderTransition } from '../notifications/notification.events';
 
 /**
  * Everything that should happen AFTER an order change has been committed:
@@ -37,5 +37,14 @@ export function publishOrderUpdated(
     if (transition) notifyOrderTransition(order, transition.from, transition.to, transition.actorId);
   } catch (err) {
     logger.warn({ err, orderId: order.id }, 'failed to publish order update event');
+  }
+}
+
+/** A compensation coupon was issued alongside a cancellation — tell the customer (see order.service.cancelOrder). */
+export function publishCouponIssued(order: OrderDTO, coupon: CouponDTO) {
+  try {
+    notifyCouponIssued(order, coupon);
+  } catch (err) {
+    logger.warn({ err, orderId: order.id }, 'failed to publish coupon issued event');
   }
 }

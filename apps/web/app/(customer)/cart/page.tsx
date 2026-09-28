@@ -3,8 +3,8 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, MessageSquareText, Minus, Plus, Plus as PlusIcon, ShoppingBag, Trash2 } from 'lucide-react';
-import type { AddressDTO, OrderDTO, RestaurantDTO } from '@foodbowl/shared';
+import { AlertTriangle, MessageSquareText, Minus, Plus, Plus as PlusIcon, ShoppingBag, Tag, Trash2, X } from 'lucide-react';
+import type { AddressDTO, CouponDTO, OrderDTO, RestaurantDTO } from '@foodbowl/shared';
 import { AddressForm } from '@/components/address/address-form';
 import { FoodImage } from '@/components/menu/food-image';
 import { VegIndicator } from '@/components/menu/veg-indicator';
@@ -37,9 +37,20 @@ export default function CartPage() {
   const [placing, setPlacing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  const [coupons, setCoupons] = React.useState<CouponDTO[] | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = React.useState<CouponDTO | null>(null);
+  const [couponInput, setCouponInput] = React.useState('');
+  const [couponError, setCouponError] = React.useState<string | null>(null);
+  const [checkingCoupon, setCheckingCoupon] = React.useState(false);
+
   React.useEffect(() => {
     apiClient.get<RestaurantDTO>('/api/v1/restaurant').then(setRestaurant).catch(() => undefined);
   }, []);
+
+  React.useEffect(() => {
+    if (!user) return;
+    apiClient.get<CouponDTO[]>('/api/v1/coupons/me').then(setCoupons).catch(() => setCoupons([]));
+  }, [user]);
 
   React.useEffect(() => {
     if (!user) return;
@@ -68,7 +79,11 @@ export default function CartPage() {
 
   const deliveryFee = Number(restaurant?.deliveryFee ?? 0);
   const minOrder = Number(restaurant?.minOrderAmount ?? 0);
-  const total = subtotal + deliveryFee;
+  const activeCoupons = (coupons ?? []).filter((c) => c.status === 'ACTIVE');
+  // Estimate only — the server is the source of truth and recomputes this from
+  // the coupon's real percentage when the order is actually placed.
+  const discount = appliedCoupon ? Math.round(subtotal * (Number(appliedCoupon.discountPercent) / 100) * 100) / 100 : 0;
+  const total = subtotal + deliveryFee - discount;
   const closed = restaurant ? !restaurant.isOpen : false;
   const belowMinimum = subtotal < minOrder;
 
@@ -90,15 +105,51 @@ export default function CartPage() {
     setPlacing(true);
     setError(null);
     try {
-      const order = await apiClient.post<OrderDTO>('/api/v1/orders', { addressId, notes: notes.trim() || undefined });
+      const order = await apiClient.post<OrderDTO>('/api/v1/orders', {
+        addressId,
+        notes: notes.trim() || undefined,
+        couponCode: appliedCoupon?.code,
+      });
       await refresh();
       toast({ title: `Order ${order.orderNumber} placed`, description: 'The restaurant has been notified.', variant: 'success' });
       router.push(`/orders/${order.id}`);
     } catch (err) {
+      // A coupon that got used/expired between loading the cart and checking
+      // out is the one failure worth calling out specifically — everything
+      // else already reads fine from the generic API error message.
+      if (appliedCoupon && err instanceof ApiError && (err.statusCode === 404 || err.statusCode === 409)) {
+        setAppliedCoupon(null);
+        apiClient.get<CouponDTO[]>('/api/v1/coupons/me').then(setCoupons).catch(() => undefined);
+      }
       setError(err instanceof ApiError ? err.message : 'Could not place your order. Please try again.');
       await refresh().catch(() => undefined);
     } finally {
       setPlacing(false);
+    }
+  }
+
+  async function applyCoupon(code: string) {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setCheckingCoupon(true);
+    setCouponError(null);
+    try {
+      // No dedicated "validate" endpoint — GET /coupons/me is the source of
+      // truth for what's actually redeemable, so match against that.
+      let mine = coupons;
+      if (!mine) {
+        mine = await apiClient.get<CouponDTO[]>('/api/v1/coupons/me');
+        setCoupons(mine);
+      }
+      const match = mine.find((c) => c.code.toLowerCase() === trimmed.toLowerCase());
+      if (!match) setCouponError('Coupon not found on your account.');
+      else if (match.status !== 'ACTIVE') setCouponError(`This coupon was already ${match.status.toLowerCase()}.`);
+      else {
+        setAppliedCoupon(match);
+        setCouponInput('');
+      }
+    } finally {
+      setCheckingCoupon(false);
     }
   }
 
@@ -297,6 +348,20 @@ export default function CartPage() {
                 </div>
                 <Textarea id="order-notes" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, gate code, where to leave it…" />
               </div>
+
+              <CouponPicker
+                activeCoupons={activeCoupons}
+                applied={appliedCoupon}
+                input={couponInput}
+                onInputChange={(v) => {
+                  setCouponInput(v);
+                  setCouponError(null);
+                }}
+                onApply={applyCoupon}
+                onRemove={() => setAppliedCoupon(null)}
+                checking={checkingCoupon}
+                error={couponError}
+              />
             </CardContent>
           </Card>
         )}
@@ -305,7 +370,7 @@ export default function CartPage() {
       <Card className="hidden h-fit md:sticky md:top-20 md:block">
         <CardContent className="flex flex-col gap-4 p-5">
           <h2 className="font-semibold">Order summary</h2>
-          <SummaryRows subtotal={subtotal} deliveryFee={deliveryFee} total={total} />
+          <SummaryRows subtotal={subtotal} deliveryFee={deliveryFee} discount={discount} couponCode={appliedCoupon?.code} total={total} />
           {error && <p className="text-sm text-destructive">{error}</p>}
           {checkoutButton}
           <p className="text-center text-xs text-muted-foreground">Cash on delivery only.</p>
@@ -324,6 +389,80 @@ export default function CartPage() {
   );
 }
 
+function CouponPicker({
+  activeCoupons,
+  applied,
+  input,
+  onInputChange,
+  onApply,
+  onRemove,
+  checking,
+  error,
+}: {
+  activeCoupons: CouponDTO[];
+  applied: CouponDTO | null;
+  input: string;
+  onInputChange: (value: string) => void;
+  onApply: (code: string) => void;
+  onRemove: () => void;
+  checking: boolean;
+  error: string | null;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-3">
+      <label htmlFor="coupon-code" className="flex items-center gap-1.5 text-sm font-medium">
+        <Tag className="h-3.5 w-3.5" /> Coupon
+      </label>
+      {applied ? (
+        <div className="flex items-center justify-between rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm">
+          <span>
+            <span className="font-medium">{applied.code}</span> · {applied.discountPercent}% off applied
+          </span>
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onRemove} aria-label="Remove coupon">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <>
+          {activeCoupons.length > 0 && (
+            <div className="flex flex-wrap gap-1.5" data-testid="my-coupons">
+              {activeCoupons.map((c) => (
+                <button
+                  key={c.code}
+                  type="button"
+                  onClick={() => onApply(c.code)}
+                  className="rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+                >
+                  {c.code} · {c.discountPercent}% off
+                </button>
+              ))}
+            </div>
+          )}
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onApply(input);
+            }}
+          >
+            <Input
+              id="coupon-code"
+              placeholder="Have a code?"
+              value={input}
+              onChange={(e) => onInputChange(e.target.value)}
+              className="h-9"
+            />
+            <Button type="submit" size="sm" variant="outline" disabled={checking || !input.trim()}>
+              Apply
+            </Button>
+          </form>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 function Notice({ tone, children }: { tone: 'warning'; children: React.ReactNode }) {
   return (
     <div className={cn('flex items-start gap-2 rounded-md border p-3 text-sm', tone === 'warning' && 'border-warning/50 bg-warning/10')}>
@@ -333,7 +472,19 @@ function Notice({ tone, children }: { tone: 'warning'; children: React.ReactNode
   );
 }
 
-function SummaryRows({ subtotal, deliveryFee, total }: { subtotal: number; deliveryFee: number; total: number }) {
+function SummaryRows({
+  subtotal,
+  deliveryFee,
+  discount,
+  couponCode,
+  total,
+}: {
+  subtotal: number;
+  deliveryFee: number;
+  discount: number;
+  couponCode?: string;
+  total: number;
+}) {
   return (
     <>
       <div className="flex justify-between text-sm">
@@ -344,6 +495,12 @@ function SummaryRows({ subtotal, deliveryFee, total }: { subtotal: number; deliv
         <span className="text-muted-foreground">Delivery fee</span>
         <span>{money(deliveryFee)}</span>
       </div>
+      {discount > 0 && (
+        <div className="flex justify-between text-sm text-success">
+          <span>Coupon {couponCode}</span>
+          <span>−{money(discount)}</span>
+        </div>
+      )}
       <Separator />
       <div className="flex justify-between font-semibold">
         <span>Total</span>

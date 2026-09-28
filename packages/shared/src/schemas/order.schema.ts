@@ -5,6 +5,8 @@ import { imageUrlSchema } from './menu.schema';
 export const placeOrderSchema = z.object({
   addressId: z.string(),
   notes: z.string().max(500).optional(),
+  /** One of the customer's own coupons (see schemas/coupon.schema.ts) — validated and consumed at placement. */
+  couponCode: z.string().trim().min(1).max(40).optional(),
 });
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>;
 
@@ -46,3 +48,8 @@ export const deliveredConfirmationSchema = z.object({
   proofImageUrl: imageUrlSchema.optional(),
 });
 export type DeliveredConfirmationInput = z.infer<typeof deliveredConfirmationSchema>;
+
+// No `proofImageUrl` — there's no DeliveryAssignment row to hang a photo off
+// of when the restaurant delivers something itself (see delivery.service.selfDeliver).
+export const selfDeliverSchema = z.object({ codCollected: z.boolean() });
+export type SelfDeliverInput = z.infer<typeof selfDeliverSchema>;

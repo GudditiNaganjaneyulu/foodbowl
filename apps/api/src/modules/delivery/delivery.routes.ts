@@ -5,6 +5,7 @@ import {
   assignDeliverySchema,
   deliveredConfirmationSchema,
   rejectAssignmentSchema,
+  selfDeliverSchema,
 } from '@foodbowl/shared';
 import { requireAuth } from '../../plugins/auth';
 import { requirePermission } from '../../lib/rbac';
@@ -17,6 +18,7 @@ import {
   myAssignmentsDocs,
   pickedUpDocs,
   rejectDocs,
+  selfDeliverDocs,
 } from './delivery.docs';
 
 const scopeQuery = z.object({ scope: z.enum(['active', 'history']).default('active') });
@@ -37,6 +39,16 @@ export default async function deliveryRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const body = assignDeliverySchema.parse(request.body);
       return reply.code(201).send(await deliveryService.offerToPartner(request.user!.sub, body));
+    },
+  );
+
+  fastify.patch(
+    '/orders/:id/self-deliver',
+    { schema: selfDeliverDocs, preHandler: requirePermission(PERMISSIONS.DELIVERY_ASSIGN) },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = selfDeliverSchema.parse(request.body);
+      return deliveryService.selfDeliver(request.user!.sub, id, body);
     },
   );
 

@@ -6,13 +6,13 @@ A single-restaurant food-ordering platform (Swiggy/Zomato-style UX, one restaura
 
 **Customers**
 - Menu with real dish photos: category sidebar + photo cards on desktop, photo-right rows with an overlapping ADD button on phones; veg/non-veg marks, search, item customization sheet (size, spice level, add-ons) with special instructions
-- Server-backed cart that follows you across devices (guest cart merges on login), saved delivery addresses, checkout (cash on delivery) with delivery instructions, live order tracking with a status timeline, cancellation before the kitchen starts
+- Server-backed cart that follows you across devices (guest cart merges on login), saved delivery addresses, checkout (cash on delivery) with delivery instructions and an optional coupon code, live order tracking with a status timeline, cancellation before the kitchen starts
 - Profile editing and a first-run checklist (phone + address); customer support conversations with the restaurant, optionally about a specific order; in-app notifications
 
 **Restaurant** (each role gets only what it's permitted to do)
 - Owner: overview with revenue and best sellers, live order queue, menu manager (photos, options, availability), restaurant settings (open/closed, fee, minimum), user management with per-person permissions
 - Kitchen staff: live kanban queue with one-tap next steps, special-instruction flags
-- Dispatch: offer orders to delivery partners, see who has what
+- Dispatch: offer orders to delivery partners, see who has what — or, if none is available, deliver it themselves or cancel it (which sends the customer a 5%-off coupon automatically)
 - Support agents: shared inbox with filters/search, reply, internal notes, assign to a colleague, resolve — all live
 - Delivery partners: offers, accept/decline, pickup, and a delivered flow that requires confirming cash and takes a **proof-of-delivery photo** (camera on phones) shown to the customer and staff
 

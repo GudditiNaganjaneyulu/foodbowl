@@ -1,5 +1,5 @@
 import type { FastifySchema } from 'fastify';
-import { PERMISSIONS, assignDeliverySchema, deliveredConfirmationSchema, rejectAssignmentSchema } from '@foodbowl/shared';
+import { PERMISSIONS, assignDeliverySchema, deliveredConfirmationSchema, rejectAssignmentSchema, selfDeliverSchema } from '@foodbowl/shared';
 import { bearerAuth, errorResponses, fromZod, idParam, protectedErrors, ref, requiresPermission } from '../../lib/openapi';
 
 const assignGate = requiresPermission(PERMISSIONS.DELIVERY_ASSIGN);
@@ -94,5 +94,23 @@ export const deliveredDocs: FastifySchema = {
   response: {
     200: orderResponse('The delivered order, with `paymentStatus: COLLECTED`.'),
     ...stepErrors({ 400: 'Validation failed, or cash collection was not confirmed.' }),
+  },
+};
+
+export const selfDeliverDocs: FastifySchema = {
+  tags: ['Delivery'],
+  summary: 'Deliver an order ourselves (no delivery partner)',
+  description: `For when no delivery partner is available: takes an order straight from \`READY_FOR_PICKUP\` to \`DELIVERED\` without a rider, in the same one transaction as \`POST /assignments/{id}/delivered\` (payment \`COLLECTED\`, \`Order.selfDelivered: true\`). \`codCollected\` must be \`true\`. Refuses once a rider has actually accepted or picked it up — reject their assignment first (a merely *offered*, not-yet-accepted assignment doesn't block this). If instead the order simply can't be fulfilled at all, cancel it (\`POST /orders/{id}/cancel\`), which issues the customer a coupon automatically.\n\n${assignGate}`,
+  security: bearerAuth,
+  params: idParam,
+  body: fromZod(selfDeliverSchema, { example: { codCollected: true } }),
+  response: {
+    200: orderResponse('The delivered order, `selfDelivered: true`, `paymentStatus: COLLECTED`.'),
+    ...errorResponses({
+      400: 'Validation failed, or cash collection was not confirmed.',
+      ...protectedErrors,
+      404: 'No such order.',
+      409: 'The order is not `READY_FOR_PICKUP`, or a delivery partner has already accepted/picked it up.',
+    }),
   },
 };

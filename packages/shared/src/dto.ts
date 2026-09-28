@@ -112,11 +112,15 @@ export interface OrderDTO {
   subtotal: string;
   deliveryFee: string;
   discount: string;
+  /** The coupon redeemed for `discount`, if any. */
+  couponCode: string | null;
   total: string;
   paymentMethod: 'COD';
   paymentStatus: 'PENDING' | 'COLLECTED';
   placedAt: string;
   deliveredAt: string | null;
+  /** True when staff/owner completed delivery themselves — no delivery partner (see DeliveryDTO for the rider path). */
+  selfDelivered: boolean;
   cancelledAt: string | null;
   cancellationReason: string | null;
   notes: string | null;
@@ -130,6 +134,21 @@ export interface OrderDTO {
 
 export interface DeliveryAssignmentWithOrderDTO extends DeliveryDTO {
   order: OrderDTO;
+}
+
+export interface CouponDTO {
+  code: string;
+  discountPercent: string;
+  reason: string | null;
+  status: 'ACTIVE' | 'USED' | 'EXPIRED';
+  expiresAt: string;
+  usedAt: string | null;
+  createdAt: string;
+}
+
+/** Response of POST /orders/:id/cancel — a compensation coupon when applicable (see Coupon model). */
+export interface CancelOrderResultDTO extends OrderDTO {
+  issuedCoupon: CouponDTO | null;
 }
 
 export interface DeliveryPartnerDTO {

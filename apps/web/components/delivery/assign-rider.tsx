@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import type { DeliveryPartnerDTO, OrderDTO } from '@foodbowl/shared';
+import { SelfDeliverDialog } from '@/components/delivery/self-deliver-dialog';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toaster';
@@ -28,6 +29,7 @@ export function AssignRider({ order, onChanged }: { order: OrderDTO; onChanged: 
   const [partners, setPartners] = React.useState<DeliveryPartnerDTO[] | null>(null);
   const [choice, setChoice] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  const [selfDelivering, setSelfDelivering] = React.useState(false);
 
   React.useEffect(() => {
     if (!canAssign) return;
@@ -79,6 +81,19 @@ export function AssignRider({ order, onChanged }: { order: OrderDTO; onChanged: 
       {canAssign && !delivery && !eligible && (
         <p className="text-xs text-muted-foreground">Accept the order first, then you can assign a delivery partner.</p>
       )}
+      {canAssign && order.status === 'READY_FOR_PICKUP' && !locked && (
+        <Button variant="outline" size="sm" onClick={() => setSelfDelivering(true)} data-testid="self-deliver-trigger">
+          No rider available — deliver it ourselves
+        </Button>
+      )}
+      <SelfDeliverDialog
+        order={selfDelivering ? order : null}
+        onClose={() => setSelfDelivering(false)}
+        onChanged={(updated) => {
+          onChanged(updated);
+          setSelfDelivering(false);
+        }}
+      />
     </div>
   );
 }

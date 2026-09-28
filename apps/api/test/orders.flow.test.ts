@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { io as connect, type Socket } from 'socket.io-client';
-import { REALTIME, type CartDTO, type OrderDTO } from '@foodbowl/shared';
+import { REALTIME, type CancelOrderResultDTO, type CartDTO, type CouponDTO, type OrderDTO } from '@foodbowl/shared';
 import type { FastifyInstance } from 'fastify';
 import { settleNotifications } from '../src/modules/notifications/notification.service';
 import { deleteSince, resetBaseline } from './cleanup';
@@ -434,6 +434,59 @@ describeDb('cart, checkout and order lifecycle (needs TEST_DATABASE_URL)', () =>
         await c1.req('POST', `/api/v1/orders/${order.id}/cancel`, { reason: 'first' });
         expect((await c1.req('POST', `/api/v1/orders/${order.id}/cancel`, { reason: 'again' })).status).toBe(409);
         expect((await kitchen.req('PATCH', `/api/v1/orders/${order.id}/status`, { status: 'CONFIRMED' })).status).toBe(409);
+      });
+
+      it('issues a 5% coupon when the restaurant cancels once the food is ready — but not for an early cancel', async () => {
+        const order = await placeSimpleOrder(c1, c1Address);
+        await kitchen.req('PATCH', `/api/v1/orders/${order.id}/status`, { status: 'CONFIRMED' });
+        await kitchen.req('PATCH', `/api/v1/orders/${order.id}/status`, { status: 'PREPARING' });
+        await kitchen.req('PATCH', `/api/v1/orders/${order.id}/status`, { status: 'READY_FOR_PICKUP' });
+
+        const res = await owner.req('POST', `/api/v1/orders/${order.id}/cancel`, { reason: 'No delivery partner available' });
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const cancelled = res.body as CancelOrderResultDTO;
+        expect(cancelled.status).toBe('CANCELLED');
+        expect(cancelled.issuedCoupon).toMatchObject({ discountPercent: '5.00', status: 'ACTIVE' });
+        expect(cancelled.issuedCoupon!.code).toMatch(/^SORRY\d{6}$/);
+
+        // Shows up for the customer, and can be redeemed on their next order.
+        const mine = (await c1.req('GET', '/api/v1/coupons/me')).body as CouponDTO[];
+        const coupon = mine.find((c) => c.code === cancelled.issuedCoupon!.code);
+        expect(coupon).toMatchObject({ status: 'ACTIVE' });
+
+        await emptyCart(c1);
+        await addToCart(c1, { menuItemId: SEED.springRolls, quantity: 1 });
+        const redeemed = await c1.req('POST', '/api/v1/orders', { addressId: c1Address, couponCode: coupon!.code });
+        expect(redeemed.status, JSON.stringify(redeemed.body)).toBe(201);
+        createdOrderIds.push(redeemed.body.id);
+        expect(redeemed.body.couponCode).toBe(coupon!.code);
+        expect(Number(redeemed.body.discount)).toBeCloseTo(Number(redeemed.body.subtotal) * 0.05, 2);
+        expect(Number(redeemed.body.total)).toBeCloseTo(
+          Number(redeemed.body.subtotal) + Number(redeemed.body.deliveryFee) - Number(redeemed.body.discount),
+          2,
+        );
+
+        // Spent — cannot be reused, and cancelling an early order earns nothing.
+        expect((await c1.req('GET', '/api/v1/coupons/me')).body).toEqual(
+          expect.arrayContaining([expect.objectContaining({ code: coupon!.code, status: 'USED' })]),
+        );
+        await emptyCart(c1);
+        await addToCart(c1, { menuItemId: SEED.springRolls, quantity: 1 });
+        const reuse = await c1.req('POST', '/api/v1/orders', { addressId: c1Address, couponCode: coupon!.code });
+        expect(reuse.status).toBe(409);
+
+        const early = await placeSimpleOrder(c1, c1Address);
+        const earlyCancel = (await c1.req('POST', `/api/v1/orders/${early.id}/cancel`, { reason: 'changed my mind' }))
+          .body as CancelOrderResultDTO;
+        expect(earlyCancel.issuedCoupon).toBeNull();
+      });
+
+      it("rejects a coupon that isn't the customer's own, or is unknown", async () => {
+        await emptyCart(c1);
+        await addToCart(c1, { menuItemId: SEED.springRolls, quantity: 1 });
+        expect(
+          (await c1.req('POST', '/api/v1/orders', { addressId: c1Address, couponCode: 'NOT-A-REAL-CODE' })).status,
+        ).toBe(404);
       });
     });
   });

@@ -44,6 +44,16 @@ async function acceptedReadyOrder(partner: Session) {
   return res.body as OrderDTO;
 }
 
+/** Order that is ready for pickup with no delivery assignment at all. */
+async function readyOrderNoRider() {
+  const order = await newOrder();
+  await advance(order.id, 'CONFIRMED');
+  await advance(order.id, 'PREPARING');
+  const res = await advance(order.id, 'READY_FOR_PICKUP');
+  expect(res.status).toBe(200);
+  return res.body as OrderDTO;
+}
+
 describeDb('delivery workflow (needs TEST_DATABASE_URL)', () => {
   beforeAll(async () => {
     const { buildApp } = await import('../src/app');
@@ -299,6 +309,59 @@ describeDb('delivery workflow (needs TEST_DATABASE_URL)', () => {
       expect(active.some((a) => a.order.id === order.id)).toBe(false);
       const history = (await rider1.req('GET', '/api/v1/delivery/me/assignments?scope=history')).body as DeliveryAssignmentWithOrderDTO[];
       expect(history.some((a) => a.order.id === order.id)).toBe(true);
+    });
+  });
+
+  describe('self-delivery (no delivery partner available)', () => {
+    it('lets a dispatcher (delivery.assign) deliver it themselves', async () => {
+      const order = await readyOrderNoRider();
+      const res = await dispatcher.req('PATCH', `/api/v1/delivery/orders/${order.id}/self-deliver`, { codCollected: true });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body).toMatchObject({ status: 'DELIVERED', selfDelivered: true, paymentStatus: 'COLLECTED', delivery: null });
+      expect(res.body.deliveredAt).toBeTruthy();
+
+      const detail = (await owner.req('GET', `/api/v1/orders/${order.id}`)).body as OrderDTO;
+      expect(detail.statusLogs!.map((l) => l.toStatus)).toEqual([
+        'PLACED', 'CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED',
+      ]);
+    });
+
+    it('requires delivery.assign — orders.manage alone is not enough', async () => {
+      const order = await readyOrderNoRider();
+      const res = await kitchen.req('PATCH', `/api/v1/delivery/orders/${order.id}/self-deliver`, { codCollected: true });
+      expect(res.status).toBe(403);
+    });
+
+    it('requires the order to actually be ready for pickup', async () => {
+      const order = await newOrder(); // still PLACED
+      const res = await dispatcher.req('PATCH', `/api/v1/delivery/orders/${order.id}/self-deliver`, { codCollected: true });
+      expect(res.status).toBe(409);
+    });
+
+    it('requires cash collection to be confirmed', async () => {
+      const order = await readyOrderNoRider();
+      const res = await dispatcher.req('PATCH', `/api/v1/delivery/orders/${order.id}/self-deliver`, { codCollected: false });
+      expect(res.status).toBe(400);
+      expect((await owner.req('GET', `/api/v1/orders/${order.id}`)).body.status).toBe('READY_FOR_PICKUP');
+    });
+
+    it('is still fine to self-deliver over a merely OFFERED (not yet accepted) rider', async () => {
+      const order = await offeredOrder(rider1);
+      await advance(order.id, 'PREPARING');
+      await advance(order.id, 'READY_FOR_PICKUP');
+      const res = await dispatcher.req('PATCH', `/api/v1/delivery/orders/${order.id}/self-deliver`, { codCollected: true });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+    });
+
+    it('refuses once a rider has actually accepted it — reject their assignment first', async () => {
+      const accepted = await acceptedReadyOrder(rider1);
+      const res = await dispatcher.req('PATCH', `/api/v1/delivery/orders/${accepted.id}/self-deliver`, { codCollected: true });
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatch(/already has this order/);
+      // Freed up by rejecting, then self-delivery works.
+      await rider1.req('PATCH', `/api/v1/delivery/assignments/${assignmentIdOf(accepted)}/reject`, {});
+      const retry = await dispatcher.req('PATCH', `/api/v1/delivery/orders/${accepted.id}/self-deliver`, { codCollected: true });
+      expect(retry.status, JSON.stringify(retry.body)).toBe(200);
     });
   });
 

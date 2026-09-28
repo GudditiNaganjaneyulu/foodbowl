@@ -5,6 +5,7 @@ import {
   TERMINAL_STATUSES,
   type AssignDeliveryInput,
   type DeliveredConfirmationInput,
+  type SelfDeliverInput,
   type DeliveryAssignmentWithOrderDTO,
   type DeliveryPartnerDTO,
   type OrderDTO,
@@ -18,6 +19,7 @@ import { getPaymentProvider } from '../../lib/payment';
 import { getActor } from '../../lib/rbac';
 import { orderInclude, orderDetailInclude, toDeliveryDTO, toOrderDTO } from '../orders/order.dto';
 import { publishOrderUpdated } from '../orders/order.events';
+import { ACTIVELY_ASSIGNED } from '../orders/order-rules';
 import { applyTransition, publishTransition } from '../orders/order.service';
 import { notifyDeliveryOffered, notifyDeliveryRejected } from '../notifications/notification.events';
 
@@ -211,5 +213,39 @@ export async function markDelivered(
     await getPaymentProvider('COD').confirmPayment(row.orderId, { tx });
     return applyTransition(tx, row.orderId, ORDER_STATUS.DELIVERED, actor, { note: 'Delivered, cash collected' });
   });
+  return publishTransition(result);
+}
+
+/**
+ * The restaurant delivers an order itself — no rider involved. For when no
+ * delivery partner is available: staff/owner with `delivery.assign` can take
+ * the order straight from READY_FOR_PICKUP to DELIVERED, same cash-collection
+ * confirmation as a rider's markDelivered. No DeliveryAssignment row is
+ * created (deliveryPartnerId is required on that model, and there is no
+ * partner); `Order.selfDelivered` is the marker instead.
+ */
+export async function selfDeliver(actorUserId: string, orderId: string, input: SelfDeliverInput): Promise<OrderDTO> {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { deliveryAssignment: true } });
+  if (!order) throw new HttpError('Order not found', 404);
+  if (order.status !== ORDER_STATUS.READY_FOR_PICKUP) {
+    throw new HttpError(`An order that is ${order.status} cannot be self-delivered`, 409);
+  }
+  if (order.deliveryAssignment && ACTIVELY_ASSIGNED.includes(order.deliveryAssignment.status)) {
+    throw new HttpError('A delivery partner already has this order — reject their assignment first to deliver it yourselves', 409);
+  }
+  if (!input.codCollected) {
+    throw new HttpError('Confirm that you collected the cash before completing the delivery', 400);
+  }
+  const actor = await getActor(actorUserId);
+  const result = await prisma.$transaction(async (tx) => {
+    await applyTransition(tx, orderId, ORDER_STATUS.OUT_FOR_DELIVERY, actor, {
+      note: 'Restaurant is delivering this order directly — no delivery partner',
+    });
+    await tx.order.update({ where: { id: orderId }, data: { selfDelivered: true } });
+    // Same transaction as the status change, same as the rider path above.
+    await getPaymentProvider('COD').confirmPayment(orderId, { tx });
+    return applyTransition(tx, orderId, ORDER_STATUS.DELIVERED, actor, { note: 'Delivered by restaurant staff, cash collected' });
+  });
+  await writeAudit(actorUserId, 'delivery.self_deliver', 'Order', orderId, {});
   return publishTransition(result);
 }

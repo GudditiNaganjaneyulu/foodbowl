@@ -155,11 +155,26 @@ Built milestones 4b–10 plus customer support. What a future session needs to k
 
 **Deployment gotcha hit for real**: deploying new code without running `prisma migrate deploy` fails order placement with "column `note` does not exist". Migrations must run on every deploy (`docs/DEPLOYMENT.md` → Upgrading).
 
+## 2026-09-28 session — South Indian menu, OTel metrics, self-delivery + cancellation coupons
+
+**Menu**: added Lunch/Dinner categories and extended Breakfast (24 South Indian dishes total). Photos sourced from Wikimedia Commons, resized, uploaded to the `menu-images` bucket, credited in `docs/MENU_PHOTO_CREDITS.md`, local copies deleted (same pattern as the original 24). One photo (`pulihora.jpg`) had to be re-sourced — the first Commons file had no listed author, which the credits table can't cite.
+
+**Metrics**: `lib/tracing.ts` now also starts a `PeriodicExportingMetricReader` (OTLP), not traces only. New `lib/otel.ts` holds the shared `tracer`/`meter`/`withSpan` (order.service.ts's local copy was folded into it). `infra/otel-collector-config.yaml` got a `metrics` pipeline; `docker-compose.yml` got `otel-collector` + `jaeger` services (Jaeger UI on `:16686`; OTLP ports are internal-only). Jaeger takes traces only — metrics currently just land in the collector's debug log until an external backend (discussed: Grafana Cloud vs New Relic free tiers) is wired in.
+
+**Self-delivery + cancellation coupons** (`orders.manage`/`delivery.assign` scope):
+- `ORDER_TRANSITIONS` now allows `CANCELLED` from `READY_FOR_PICKUP`/`OUT_FOR_DELIVERY`, not just up to `PREPARING` — but `order-rules.ts` blocks it once a rider has actually `ACCEPTED`/`PICKED_UP` (not just `OFFERED`) the same new `OrderAccess.assignmentStatus`/`ACTIVELY_ASSIGNED` check delivery.service.selfDeliver also uses. **This nuance broke an existing integration test on the first pass** (`delivery.flow.test.ts`'s "cannot be reassigned or cancelled mid-delivery" — the fix was the guard, not the test).
+- New `PATCH /delivery/orders/:id/self-deliver` (`delivery.assign`): takes a `READY_FOR_PICKUP` order straight to `DELIVERED` with no rider, same one-transaction COD confirmation as a rider's `markDelivered`. `Order.selfDelivered` is the marker (no `DeliveryAssignment` row — `deliveryPartnerId` is required on that model).
+- New `Coupon` model — auto-issued (5% off, 30-day expiry, code `SORRY######`) when staff/owner cancel a `READY_FOR_PICKUP`/`OUT_FOR_DELIVERY` order (the kitchen already made the food; not issued for early customer self-cancels). `modules/coupons/` (`GET /coupons/me`); redeemed via `placeOrderSchema.couponCode`, validated + consumed atomically inside `createOrderFromCart`'s transaction. `cancelOrder` now returns `CancelOrderResultDTO` (`OrderDTO & { issuedCoupon }`).
+- Web: cart page has a coupon picker (quick-apply chips for the customer's own active coupons, or type a code) and a discount line in the order summary; the dispatch board's `AssignRider` gets a "No rider available — deliver it ourselves" button (only when eligible and not locked) opening `SelfDeliverDialog`.
+- `test/cleanup.ts`'s `deleteSince` now also clears `coupon` rows — `sourceOrderId`/`usedOnOrderId` are plain strings, not real FKs, so nothing cascades them.
+
 ## Known gaps / next ideas
 - Opening hours are informational only (no timezone); `isOpen` is the sole gate.
 - Support has no attachments, canned replies, or SLA timers; conversations can't be merged.
 - No push (only in-app/email); no automatic dispatch.
 - The `infra/` compose files, Dockerfiles and `deploy.yml` were being rewritten by the owner — the workflow still references files that may have moved; keep it in sync and add the migrate + `db:sync-rbac` steps.
+- Coupons are issue-only for now: nothing lets the owner manually create/revoke one, see who has unused ones, or change the 5%/30-day defaults (`modules/coupons/coupon.service.ts`) — the only source is the automatic post-kitchen cancellation. An admin screen for this would be a natural next step if coupons get used for anything beyond that.
+- No metrics backend is wired up yet (Grafana Cloud vs New Relic free tier — see 2026-09-28 session): metrics are exported correctly but only visible in the otel-collector's own container logs.
 
 ## Older notes: known gaps from earlier sessions
 

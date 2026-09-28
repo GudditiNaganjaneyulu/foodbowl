@@ -19,7 +19,7 @@ services:
   # own logs — see infra/otel-collector-config.yaml). UI only; not something
   # a customer's browser ever talks to, so only its UI port is published.
   jaeger:
-    image: jaegertracing/all-in-one:1.62
+    image: jaegertracing/all-in-one:latest
     container_name: jaeger
     restart: unless-stopped
     environment:

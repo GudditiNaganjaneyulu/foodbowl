@@ -3,6 +3,8 @@ import { trace } from '@opentelemetry/api';
 import {
   ORDER_STATUS,
   TERMINAL_STATUSES,
+  type CancelOrderResultDTO,
+  type CouponDTO,
   type OrderDTO,
   type OrderStatus,
   type PlaceOrderInput,
@@ -16,8 +18,9 @@ import { getPaymentProvider } from '../../lib/payment';
 import { getActor, type Actor } from '../../lib/rbac';
 import { cartInclude, priceCartLine } from '../cart/cart.service';
 import { sumMoney } from '../cart/pricing';
+import { issueCancellationCoupon, markCouponUsed, redeemCoupon } from '../coupons/coupon.service';
 import { orderDetailInclude, orderInclude, toOrderDTO, type OrderDetailRow } from './order.dto';
-import { publishOrderPlaced, publishOrderUpdated } from './order.events';
+import { publishCouponIssued, publishOrderPlaced, publishOrderUpdated } from './order.events';
 import { canViewOrder, authorizeTransition } from './order-rules';
 
 const ACTIVE_STATUSES = Object.values(ORDER_STATUS).filter((s) => !TERMINAL_STATUSES.includes(s));
@@ -60,7 +63,11 @@ async function createOrderFromCart(tx: Prisma.TransactionClient, userId: string,
     throw new HttpError(`The minimum order is $${fmt(restaurant.minOrderAmount)}`, 400);
   }
   const deliveryFee = restaurant.deliveryFee;
-  const discount = ZERO;
+  // Validated but not yet marked used — that happens below, once the order
+  // itself exists, so a failed order (e.g. an order-number collision, retried
+  // by the caller) never burns the coupon.
+  const redeemed = input.couponCode ? await redeemCoupon(tx, userId, input.couponCode, subtotal) : null;
+  const discount = redeemed?.discount ?? ZERO;
   const total = subtotal.plus(deliveryFee).minus(discount);
 
   const intent = await getPaymentProvider('COD').createIntent({ total });
@@ -74,6 +81,7 @@ async function createOrderFromCart(tx: Prisma.TransactionClient, userId: string,
       subtotal,
       deliveryFee,
       discount,
+      couponCode: redeemed ? input.couponCode : null,
       total,
       paymentMethod: 'COD',
       paymentStatus: intent.paymentStatus,
@@ -101,6 +109,7 @@ async function createOrderFromCart(tx: Prisma.TransactionClient, userId: string,
     include: orderDetailInclude,
   });
 
+  if (redeemed) await markCouponUsed(tx, redeemed.couponId, order.id);
   await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
   return order;
 }
@@ -201,11 +210,12 @@ export async function applyTransition(
 ): Promise<TransitionResult> {
   const order = await tx.order.findUnique({
     where: { id: orderId },
-    include: { deliveryAssignment: { select: { deliveryPartnerId: true } } },
+    include: { deliveryAssignment: { select: { deliveryPartnerId: true, status: true } } },
   });
   const access = order && {
     customerId: order.userId,
     assignedPartnerId: order.deliveryAssignment?.deliveryPartnerId ?? null,
+    assignmentStatus: order.deliveryAssignment?.status ?? null,
   };
   if (!order || !access || !canViewOrder(actor, access)) throw new HttpError('Order not found', 404);
 
@@ -278,6 +288,28 @@ export async function transition(
 export const advanceOrder = (orderId: string, userId: string, to: OrderStatus, note?: string) =>
   transition(orderId, to, userId, { note });
 
-export const cancelOrder = (orderId: string, userId: string, reason: string) =>
-  transition(orderId, ORDER_STATUS.CANCELLED, userId, { cancellationReason: reason });
+// Cancelling this late means the kitchen already made the food — the order
+// was ready (or already out) and only fell through afterwards, e.g. no
+// delivery partner ever accepted it. That's the restaurant's problem, not
+// the customer's, so it's compensated with a coupon (see
+// coupon.service.issueCancellationCoupon). Earlier cancellations
+// (PLACED/CONFIRMED — the kitchen hasn't started) get none.
+const COMPENSATE_CANCEL_FROM: readonly OrderStatus[] = [ORDER_STATUS.READY_FOR_PICKUP, ORDER_STATUS.OUT_FOR_DELIVERY];
+
+export async function cancelOrder(orderId: string, userId: string, reason: string): Promise<CancelOrderResultDTO> {
+  return withSpan('order.cancel', { 'order.id': orderId }, async () => {
+    const actor = await getActor(userId);
+    let issuedCoupon: CouponDTO | null = null;
+    const result = await prisma.$transaction(async (tx) => {
+      const r = await applyTransition(tx, orderId, ORDER_STATUS.CANCELLED, actor, { cancellationReason: reason });
+      if (COMPENSATE_CANCEL_FROM.includes(r.from)) {
+        issuedCoupon = await issueCancellationCoupon(tx, r.order.userId, r.order.id, r.order.orderNumber);
+      }
+      return r;
+    });
+    const dto = publishTransition(result);
+    if (issuedCoupon) publishCouponIssued(dto, issuedCoupon);
+    return { ...dto, issuedCoupon };
+  });
+}
 

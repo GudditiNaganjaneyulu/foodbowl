@@ -13,6 +13,8 @@ import type { Actor } from '../../lib/rbac';
 export interface OrderAccess {
   customerId: string;
   assignedPartnerId: string | null;
+  /** The current delivery assignment's status, if any — see ACTIVELY_ASSIGNED below. */
+  assignmentStatus?: string | null;
 }
 
 export type Decision = { allowed: true } | { allowed: false; statusCode: 400 | 403 | 409; message: string };
@@ -21,6 +23,15 @@ export type Decision = { allowed: true } | { allowed: false; statusCode: 400 | 4
 export const CUSTOMER_CANCELLABLE: readonly OrderStatus[] = CUSTOMER_CANCELLABLE_STATUSES;
 
 const DELIVERY_LEG: readonly OrderStatus[] = [ORDER_STATUS.OUT_FOR_DELIVERY, ORDER_STATUS.DELIVERED];
+
+/**
+ * A rider genuinely holds this order — as opposed to merely having been
+ * `OFFERED` it (still up for grabs: re-offerable per delivery.service, and
+ * safe to cancel or self-deliver over) or `REJECTED`/`DELIVERED`. Once
+ * ACCEPTED or PICKED_UP, cancelling or self-delivering out from under them
+ * would strand a rider mid-errand, so both are blocked below.
+ */
+export const ACTIVELY_ASSIGNED: readonly string[] = ['ACCEPTED', 'PICKED_UP'];
 
 export function canViewOrder(actor: Actor, order: OrderAccess): boolean {
   return (
@@ -57,8 +68,17 @@ export function authorizeTransition(args: {
   const hasRequiredRole = requirement.roles?.includes(actor.role as never) ?? false;
 
   if (to === ORDER_STATUS.CANCELLED) {
-    // Restaurant side: the owner, or staff with orders.manage.
+    // Restaurant side: the owner, or staff with orders.manage — but not once
+    // a rider actively holds it (accepted or picked up): reject their
+    // assignment first, same rule as reassigning (see delivery.service).
     if (actor.role === ROLES.RESTAURANT_OWNER || actor.permissions.has(PERMISSIONS.ORDERS_MANAGE)) {
+      if (order.assignmentStatus && ACTIVELY_ASSIGNED.includes(order.assignmentStatus)) {
+        return {
+          allowed: false,
+          statusCode: 409,
+          message: 'A delivery partner already has this order — reject their assignment first if it needs to be cancelled',
+        };
+      }
       return { allowed: true };
     }
     if (isCustomerOfOrder) {
@@ -74,8 +94,14 @@ export function authorizeTransition(args: {
   }
 
   if (DELIVERY_LEG.includes(to)) {
-    // The delivery leg belongs to the assigned rider (or the owner as an override).
-    if (isAssignedPartner || actor.role === ROLES.RESTAURANT_OWNER) return { allowed: true };
+    // The delivery leg belongs to the assigned rider, the owner (override), or
+    // staff who can assign deliveries — the latter is what lets a restaurant
+    // deliver an order itself when no partner is available (see
+    // delivery.service.selfDeliver, the only other caller that reaches here
+    // with `to` in DELIVERY_LEG).
+    if (isAssignedPartner || actor.role === ROLES.RESTAURANT_OWNER || actor.permissions.has(PERMISSIONS.DELIVERY_ASSIGN)) {
+      return { allowed: true };
+    }
     return { allowed: false, statusCode: 403, message: 'Only the assigned delivery partner can update this delivery' };
   }
 

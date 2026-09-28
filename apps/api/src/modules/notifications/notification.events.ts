@@ -1,4 +1,4 @@
-import { ORDER_STATUS, PERMISSIONS, type OrderDTO, type OrderStatus, type SupportTicketDTO } from '@foodbowl/shared';
+import { ORDER_STATUS, PERMISSIONS, type CouponDTO, type OrderDTO, type OrderStatus, type SupportTicketDTO } from '@foodbowl/shared';
 import { notify, restaurantDispatchers, restaurantOrderStaff, usersWithPermission, type NotificationPayload } from './notification.service';
 
 const money = (v: string) => `$${v}`;
@@ -113,6 +113,16 @@ export function notifyDeliveryRejected(order: OrderDTO, reason?: string) {
         body: reason ? `Reason: ${reason}. Offer it to another partner.` : 'Offer it to another partner.',
         metadata: meta(order),
       });
+}
+
+/** Separate from the cancellation notice above so the code is front and centre, not buried in it. */
+export function notifyCouponIssued(order: OrderDTO, coupon: CouponDTO) {
+  notify([order.customer.id], {
+    type: 'coupon.issued',
+    title: `${coupon.discountPercent}% off your next order`,
+    body: `We're sorry about order ${order.orderNumber}. Use code ${coupon.code} at checkout — valid until ${new Date(coupon.expiresAt).toLocaleDateString()}.`,
+    metadata: { orderId: order.id, orderNumber: order.orderNumber, couponCode: coupon.code },
+  });
 }
 
 // ── Customer support ──────────────────────────────────────────────────────

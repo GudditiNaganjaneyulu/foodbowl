@@ -19,6 +19,7 @@ const customer = actor(ROLES.CUSTOMER, [], 'cust');
 const stranger = actor(ROLES.CUSTOMER, [], 'stranger');
 const rider = actor(ROLES.DELIVERY_PARTNER, [PERMISSIONS.DELIVERY_FULFILL], 'rider');
 const otherRider = actor(ROLES.DELIVERY_PARTNER, [PERMISSIONS.DELIVERY_FULFILL], 'rider2');
+const dispatcher = actor(ROLES.STAFF, [PERMISSIONS.ORDERS_VIEW, PERMISSIONS.DELIVERY_ASSIGN], 'dispatcher');
 
 const decide = (from: OrderStatus, to: OrderStatus, who: Actor, access = order) =>
   authorizeTransition({ from, to, actor: who, order: access });
@@ -36,7 +37,7 @@ describe('state machine legality', () => {
       [S.PLACED, S.READY_FOR_PICKUP],
       [S.CONFIRMED, S.PLACED],
       [S.PREPARING, S.CONFIRMED],
-      [S.READY_FOR_PICKUP, S.CANCELLED],
+      [S.READY_FOR_PICKUP, S.DELIVERED],
     ] as const) {
       const d = decide(from, to, owner);
       expect(d.allowed).toBe(false);
@@ -85,8 +86,26 @@ describe('cancellation', () => {
     expect(decide(S.PLACED, S.CANCELLED, viewer).allowed).toBe(false);
   });
 
-  it('cannot cancel once the order is out for delivery', () => {
-    expect(decide(S.OUT_FOR_DELIVERY, S.CANCELLED, owner)).toMatchObject({ allowed: false, statusCode: 409 });
+  it('still lets the owner and orders.manage staff cancel once the food is ready or out — e.g. no delivery partner ever available', () => {
+    for (const from of [S.READY_FOR_PICKUP, S.OUT_FOR_DELIVERY]) {
+      expect(decide(from, S.CANCELLED, owner).allowed).toBe(true);
+      expect(decide(from, S.CANCELLED, kitchen).allowed).toBe(true);
+    }
+  });
+
+  it('but not once a rider has actually accepted or picked it up — even for the owner', () => {
+    for (const assignmentStatus of ['ACCEPTED', 'PICKED_UP']) {
+      const held: OrderAccess = { ...order, assignmentStatus };
+      expect(decide(S.OUT_FOR_DELIVERY, S.CANCELLED, owner, held)).toMatchObject({ allowed: false, statusCode: 409 });
+    }
+    // Merely offered (not yet accepted) doesn't block it.
+    expect(decide(S.OUT_FOR_DELIVERY, S.CANCELLED, owner, { ...order, assignmentStatus: 'OFFERED' }).allowed).toBe(true);
+  });
+
+  it("still refuses the customer once it's this late — the kitchen already started", () => {
+    for (const from of [S.READY_FOR_PICKUP, S.OUT_FOR_DELIVERY]) {
+      expect(decide(from, S.CANCELLED, customer)).toMatchObject({ allowed: false, statusCode: 403 });
+    }
   });
 });
 
@@ -97,16 +116,22 @@ describe('delivery leg', () => {
     expect(decide(S.OUT_FOR_DELIVERY, S.DELIVERED, owner).allowed).toBe(true);
   });
 
-  it('refuses a different rider, kitchen staff and the customer', () => {
+  it('also lets staff with delivery.assign take it — self-delivery when no partner is available', () => {
+    expect(decide(S.READY_FOR_PICKUP, S.OUT_FOR_DELIVERY, dispatcher).allowed).toBe(true);
+    expect(decide(S.OUT_FOR_DELIVERY, S.DELIVERED, dispatcher).allowed).toBe(true);
+  });
+
+  it('refuses a different rider, kitchen staff (without delivery.assign) and the customer', () => {
     for (const who of [otherRider, kitchen, customer]) {
       expect(decide(S.OUT_FOR_DELIVERY, S.DELIVERED, who)).toMatchObject({ allowed: false, statusCode: 403 });
     }
   });
 
-  it('refuses everyone when nobody is assigned, except the owner', () => {
+  it('refuses everyone when nobody is assigned, except the owner and delivery.assign staff', () => {
     const unassigned: OrderAccess = { customerId: 'cust', assignedPartnerId: null };
     expect(decide(S.READY_FOR_PICKUP, S.OUT_FOR_DELIVERY, rider, unassigned).allowed).toBe(false);
     expect(decide(S.READY_FOR_PICKUP, S.OUT_FOR_DELIVERY, owner, unassigned).allowed).toBe(true);
+    expect(decide(S.READY_FOR_PICKUP, S.OUT_FOR_DELIVERY, dispatcher, unassigned).allowed).toBe(true);
   });
 });
 

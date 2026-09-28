@@ -17,8 +17,8 @@ Source of truth for roles/permissions is code, not this doc: `packages/shared/sr
 |---|---|
 | `menu.manage` | Create/update/delete categories and menu items |
 | `orders.view` | See the order queue |
-| `orders.manage` | Advance order status (CONFIRMED → PREPARING → READY_FOR_PICKUP), cancel orders |
-| `delivery.assign` | Offer an order to a delivery partner |
+| `orders.manage` | Advance order status (CONFIRMED → PREPARING → READY_FOR_PICKUP), cancel orders — including a `READY_FOR_PICKUP`/`OUT_FOR_DELIVERY` order once a rider hasn't taken it (issues the customer a coupon automatically; blocked once a rider has actually accepted or picked it up) |
+| `delivery.assign` | Offer an order to a delivery partner, and — the same "no rider available" situation — mark it delivered by the restaurant itself instead (`Order.selfDelivered`) |
 | `delivery.fulfill` | Act on an order assigned to you as a delivery partner (accept/reject/pickup/deliver) |
 | `reports.view` | View revenue/order reports |
 | `restaurant.manage` | Edit restaurant settings (hours, delivery fee, open/closed) — **owner only** |

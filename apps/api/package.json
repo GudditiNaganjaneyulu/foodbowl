@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
+    "security:rate-limit-check": "tsx scripts/rate-limit-check.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -20,6 +21,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.0.1",
     "@fastify/cors": "^10.0.1",
+    "@fastify/helmet": "^13",
     "@fastify/swagger": "^9.9.0",
     "@fastify/swagger-ui": "^6.1.1",
     "@foodbowl/shared": "workspace:*",

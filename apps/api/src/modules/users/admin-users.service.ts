@@ -125,15 +125,19 @@ export async function setUserPermissions(
   await writeAudit(actorUserId, 'user.permissions_change', targetUserId, input.grants);
 }
 
-export async function deleteUser(actorUserId: string, targetUserId: string) {
+async function hasProtectedHistory(userId: string): Promise<boolean> {
   const [orderCount, assignmentCount, auditCount] = await Promise.all([
-    prisma.order.count({ where: { userId: targetUserId } }),
+    prisma.order.count({ where: { userId } }),
     prisma.deliveryAssignment.count({
-      where: { OR: [{ deliveryPartnerId: targetUserId }, { assignedByUserId: targetUserId }] },
+      where: { OR: [{ deliveryPartnerId: userId }, { assignedByUserId: userId }] },
     }),
-    prisma.auditLog.count({ where: { actorUserId: targetUserId } }),
+    prisma.auditLog.count({ where: { actorUserId: userId } }),
   ]);
-  if (orderCount + assignmentCount + auditCount > 0) {
+  return orderCount + assignmentCount + auditCount > 0;
+}
+
+export async function deleteUser(actorUserId: string, targetUserId: string) {
+  if (await hasProtectedHistory(targetUserId)) {
     throw new AdminUserError(
       'This user has historical orders/assignments/audit records — deactivate instead of deleting',
       409,
@@ -141,4 +145,34 @@ export async function deleteUser(actorUserId: string, targetUserId: string) {
   }
   await prisma.user.delete({ where: { id: targetUserId } });
   await writeAudit(actorUserId, 'user.delete', targetUserId, {});
+}
+
+// The email prefix scripts/rate-limit-check.ts uses for the accounts it
+// creates while flooding POST /register. Hardcoded (not caller-supplied) on
+// purpose — this endpoint only ever removes accounts matching this exact,
+// known-safe pattern, never an arbitrary filter, and only customer accounts
+// (role check below), so it can't become a general bulk-delete tool.
+const TEST_ACCOUNT_EMAIL_PREFIX = 'ratelimit-test-';
+
+export async function deleteTestAccounts(actorUserId: string) {
+  const candidates = await prisma.user.findMany({
+    where: { email: { startsWith: TEST_ACCOUNT_EMAIL_PREFIX }, role: { key: ROLES.CUSTOMER } },
+    select: { id: true, email: true },
+  });
+
+  const deleted: string[] = [];
+  const skipped: string[] = [];
+  for (const candidate of candidates) {
+    // Should never trip for a fresh flood-test signup, but the same
+    // deactivate-instead-of-delete safety net as deleteUser applies here too.
+    if (await hasProtectedHistory(candidate.id)) {
+      skipped.push(candidate.email);
+      continue;
+    }
+    await prisma.user.delete({ where: { id: candidate.id } });
+    await writeAudit(actorUserId, 'user.delete_test_account', candidate.id, { email: candidate.email });
+    deleted.push(candidate.email);
+  }
+
+  return { deletedCount: deleted.length, deleted, skippedCount: skipped.length, skipped };
 }

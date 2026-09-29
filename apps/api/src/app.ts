@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import helmet from '@fastify/helmet';
 import { env } from './config/env';
 import { logger } from './lib/logger';
 import authPlugin from './plugins/auth';
@@ -54,6 +55,18 @@ export async function buildApp() {
   );
 
   await fastify.register(cors, { origin: env.WEB_ORIGIN, credentials: true });
+  await fastify.register(helmet, {
+    // This API is always called cross-origin (the Next.js web app runs on a
+    // different port/host) — helmet's default `same-origin` Cross-Origin-
+    // Resource-Policy would make the browser silently discard every response
+    // even though CORS above already allows it.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    // A JSON API has little for CSP to protect (the HTML-rendering surface
+    // customers actually see is the separate web app, with its own headers);
+    // the one HTML page this API serves, Swagger UI at /docs, needs inline
+    // scripts/styles a default CSP blocks, so it's not worth fighting.
+    contentSecurityPolicy: false,
+  });
   await fastify.register(cookie);
   await fastify.register(authPlugin);
   await fastify.register(errorHandlerPlugin);

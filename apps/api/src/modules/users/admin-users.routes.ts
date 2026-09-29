@@ -10,6 +10,7 @@ import { requireAuth } from '../../plugins/auth';
 import { requirePermission } from '../../lib/rbac';
 import * as adminUsers from './admin-users.service';
 import {
+  cleanupTestAccountsDocs,
   createUserDocs,
   deleteUserDocs,
   listUsersDocs,
@@ -65,5 +66,12 @@ export default async function adminUsersRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     await adminUsers.deleteUser(request.user!.sub, id);
     return reply.code(204).send();
+  });
+
+  // Removes the customer accounts scripts/rate-limit-check.ts creates while
+  // flooding POST /register — see adminUsers.deleteTestAccounts for the fixed
+  // email-prefix + role scoping that keeps this from being a general bulk delete.
+  fastify.post('/cleanup-test-accounts', { schema: cleanupTestAccountsDocs }, async (request) => {
+    return adminUsers.deleteTestAccounts(request.user!.sub);
   });
 }

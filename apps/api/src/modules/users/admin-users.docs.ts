@@ -110,6 +110,26 @@ export const setUserPermissionsDocs: FastifySchema = {
   },
 };
 
+export const cleanupTestAccountsDocs: FastifySchema = {
+  tags: ['Admin Users'],
+  summary: 'Delete rate-limit test accounts',
+  description: `Deletes customer accounts created by scripts/rate-limit-check.ts (email starts with \`ratelimit-test-\`) — never any other account. Skips (and reports, rather than erroring) any match that unexpectedly has order/assignment/audit history. Writes one audit log entry per account deleted.\n\n${gate}`,
+  security: bearerAuth,
+  response: {
+    200: {
+      description: 'Cleanup result.',
+      type: 'object',
+      properties: {
+        deletedCount: { type: 'integer' },
+        deleted: { type: 'array', items: { type: 'string' }, description: 'Emails of deleted accounts.' },
+        skippedCount: { type: 'integer' },
+        skipped: { type: 'array', items: { type: 'string' }, description: 'Emails matched but not deleted (had history).' },
+      },
+    },
+    ...errorResponses(protectedErrors),
+  },
+};
+
 export const deleteUserDocs: FastifySchema = {
   tags: ['Admin Users'],
   summary: 'Delete a user',

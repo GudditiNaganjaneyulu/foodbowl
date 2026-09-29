@@ -1,5 +1,7 @@
 import { REALTIME, type CouponDTO, type OrderDTO, type OrderStatus } from '@foodbowl/shared';
 import { emitToRooms } from '../../lib/realtime';
+import { invalidate } from '../../lib/cache';
+import { PARTNERS_CACHE_KEY, REPORTS_CACHE_KEY } from '../../lib/cache-keys';
 import { logger } from '../../lib/logger';
 import { notifyCouponIssued, notifyOrderPlaced, notifyOrderTransition } from '../notifications/notification.events';
 
@@ -22,6 +24,8 @@ export function publishOrderPlaced(order: OrderDTO) {
   try {
     emitToRooms(orderRooms(order), REALTIME.EVENTS.ORDER_PLACED, order);
     notifyOrderPlaced(order);
+    // A new order changes today's count on the owner's dashboard.
+    void invalidate(REPORTS_CACHE_KEY);
   } catch (err) {
     logger.warn({ err, orderId: order.id }, 'failed to publish order placed event');
   }
@@ -35,6 +39,12 @@ export function publishOrderUpdated(
   try {
     emitToRooms(orderRooms(order), REALTIME.EVENTS.ORDER_UPDATED, order);
     if (transition) notifyOrderTransition(order, transition.from, transition.to, transition.actorId);
+    // Every status change (kitchen progress, delivery offer/accept/reject/
+    // pickup/delivered/self-deliver, cancellation) can move the reports
+    // numbers, the delivery-partner workload count, or both — cheaper to
+    // invalidate both unconditionally here than to track which call sites
+    // actually need which one.
+    void invalidate(REPORTS_CACHE_KEY, PARTNERS_CACHE_KEY);
   } catch (err) {
     logger.warn({ err, orderId: order.id }, 'failed to publish order update event');
   }

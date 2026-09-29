@@ -1,18 +1,37 @@
 import { Prisma } from '@prisma/client';
 import { ORDER_STATUS, ROLES, TERMINAL_STATUSES, type OrderStatus, type ReportSummaryDTO } from '@foodbowl/shared';
 import { prisma } from '../../db/prisma';
+import { cached } from '../../lib/cache';
+import { REPORTS_CACHE_KEY } from '../../lib/cache-keys';
 import { dec, fmt } from '../../lib/money';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
+// Safety net, not the real freshness mechanism — order.events.ts invalidates
+// this on every order placed/updated, which is everything that can move
+// these numbers, so it's effectively always fresh in practice. The TTL only
+// matters if an invalidation is ever missed, or the owner leaves the
+// dashboard tab open past it.
+const REPORTS_CACHE_TTL_SECONDS = 60;
 
 /**
  * The numbers behind the owner's overview. "Revenue" is cash actually
  * collected: the total of DELIVERED orders (cancelled and in-flight orders
  * never count). All day boundaries are UTC — there is no restaurant timezone
  * setting in v1.
+ *
+ * `now` is only ever overridden by tests (to pin "today"); real callers get
+ * the actual current time, so caching this by a fixed key is safe — a test
+ * run never shares a Redis instance with the dev/prod database (see
+ * test/setup.ts), so there's no risk of a `now`-pinned run poisoning a real
+ * cache entry, or the reverse.
  */
 export async function getSummary(now = new Date()): Promise<ReportSummaryDTO> {
+  return cached(REPORTS_CACHE_KEY, REPORTS_CACHE_TTL_SECONDS, () => buildSummary(now));
+}
+
+async function buildSummary(now: Date): Promise<ReportSummaryDTO> {
   const startOfToday = new Date(`${isoDay(now)}T00:00:00.000Z`);
   const weekStart = new Date(startOfToday.getTime() - 6 * DAY_MS);
   const monthStart = new Date(startOfToday.getTime() - 29 * DAY_MS);

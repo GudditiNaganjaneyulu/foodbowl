@@ -2,6 +2,8 @@ import type { Restaurant } from '@prisma/client';
 import type { RestaurantDTO, UpdateRestaurantInput } from '@foodbowl/shared';
 import { prisma } from '../../db/prisma';
 import { writeAudit } from '../../lib/audit';
+import { invalidate } from '../../lib/cache';
+import { RESTAURANT_CACHE_KEY } from '../../lib/cache-keys';
 import { dec, fmt } from '../../lib/money';
 
 export function toRestaurantDTO(r: Restaurant): RestaurantDTO {
@@ -37,5 +39,6 @@ export async function updateRestaurant(actorUserId: string, input: UpdateRestaur
     },
   });
   await writeAudit(actorUserId, 'restaurant.update', 'Restaurant', current.id, input);
+  await invalidate(RESTAURANT_CACHE_KEY);
   return updated;
 }

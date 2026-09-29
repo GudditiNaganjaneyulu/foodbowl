@@ -1,3 +1,9 @@
+extensions:
+  basicauth/grafana:
+    client_auth:
+      username: ${env:GRAFANA_CLOUD_INSTANCE_ID}
+      password: ${env:GRAFANA_CLOUD_API_KEY}
+
 receivers:
   otlp:
     protocols:
@@ -10,26 +16,33 @@ processors:
   batch: {}
 
 exporters:
-  # Local, free trace viewing. Swap/add exporters here later to point at a
-  # real backend (Honeycomb, Datadog, Tempo, …) — app code never changes.
-  otlp/jaeger:
-    endpoint: jaeger:4317
-    tls:
-      insecure: true
+  otlphttp/grafana:
+    endpoint: ${env:GRAFANA_CLOUD_OTLP_ENDPOINT}
+    auth:
+      authenticator: basicauth/grafana
+
   debug:
     verbosity: basic
 
 service:
+  extensions:
+    - basicauth/grafana
+
   pipelines:
     traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp/jaeger, debug]
+      receivers:
+        - otlp
+      processors:
+        - batch
+      exporters:
+        - otlphttp/grafana
+        - debug
+
     metrics:
-      receivers: [otlp]
-      processors: [batch]
-      # Jaeger is traces-only, so metrics only go to the collector's own logs
-      # for now (`docker logs <otel-collector container>`). Add a `prometheus`
-      # exporter here (collector-contrib image) to scrape them from a real
-      # metrics backend instead — app code (lib/tracing.ts) never changes.
-      exporters: [debug]
+      receivers:
+        - otlp
+      processors:
+        - batch
+      exporters:
+        - otlphttp/grafana
+        - debug

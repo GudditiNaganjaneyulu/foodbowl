@@ -14,6 +14,8 @@ import { requireAuth } from '../../plugins/auth';
 import { requirePermission } from '../../lib/rbac';
 import { prisma } from '../../db/prisma';
 import { redis } from '../../lib/redis';
+import { invalidate } from '../../lib/cache';
+import { MENU_CACHE_KEY } from '../../lib/cache-keys';
 import { logger } from '../../lib/logger';
 import { meter, withSpan } from '../../lib/otel';
 import {
@@ -28,7 +30,6 @@ import {
   updateMenuItemDocs,
 } from './menu.docs';
 
-const MENU_CACHE_KEY = 'menu:public';
 const MENU_CACHE_TTL_SECONDS = 60;
 
 // Metrics for the customer-facing menu browse — the one endpoint every demo
@@ -45,14 +46,7 @@ const menuItemsServed = meter.createCounter('menu.items.served', {
   description: 'Menu items returned to customers, by category',
 });
 
-async function invalidateMenuCache() {
-  if (!redis) return;
-  try {
-    await redis.del(MENU_CACHE_KEY);
-  } catch (err) {
-    logger.warn({ err }, 'failed to invalidate menu cache — it will self-correct once the TTL expires');
-  }
-}
+const invalidateMenuCache = () => invalidate(MENU_CACHE_KEY);
 
 export default async function menuRoutes(fastify: FastifyInstance) {
   // Public — no auth required, this is the customer-facing browse endpoint,

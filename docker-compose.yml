@@ -7,27 +7,34 @@ services:
     image: otel/opentelemetry-collector-contrib:0.114.0
     container_name: otel-collector
     restart: unless-stopped
-    command: ["--config=/etc/otel-collector-config.yaml"]
+
+    command:
+      - "--config=/etc/otel-collector-config.yaml"
+
     volumes:
       - ./infra/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
-    depends_on:
-      - jaeger
+
+    environment:
+      GRAFANA_CLOUD_OTLP_ENDPOINT: ${GRAFANA_CLOUD_OTLP_ENDPOINT}
+      GRAFANA_CLOUD_INSTANCE_ID: ${GRAFANA_CLOUD_INSTANCE_ID}
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY}
+
     networks:
       - app-network
 
   # Local, free trace viewing (metrics currently just land in the collector's
   # own logs — see infra/otel-collector-config.yaml). UI only; not something
   # a customer's browser ever talks to, so only its UI port is published.
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: jaeger
-    restart: unless-stopped
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "16686:16686"
-    networks:
-      - app-network
+  # jaeger:
+  #   image: jaegertracing/all-in-one:latest
+  #   container_name: jaeger
+  #   restart: unless-stopped
+  #   environment:
+  #     COLLECTOR_OTLP_ENABLED: "true"
+  #   ports:
+  #     - "16686:16686"
+  #   networks:
+  #     - app-network
 
   api:
     build:

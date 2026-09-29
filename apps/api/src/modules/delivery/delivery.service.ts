@@ -13,6 +13,8 @@ import {
 } from '@foodbowl/shared';
 import { prisma } from '../../db/prisma';
 import { writeAudit } from '../../lib/audit';
+import { cached } from '../../lib/cache';
+import { PARTNERS_CACHE_KEY } from '../../lib/cache-keys';
 import { HttpError } from '../../lib/http-error';
 import { logger } from '../../lib/logger';
 import { getPaymentProvider } from '../../lib/payment';
@@ -59,19 +61,27 @@ async function ownAssignment(partnerId: string, id: string) {
   return row;
 }
 
+// Safety net — order.events.ts invalidates this on every order update (an
+// offer, accept, reject, pickup, delivery or cancellation can all change a
+// partner's workload count), so a dispatcher sees the real number, not one
+// up to a minute stale.
+const PARTNERS_CACHE_TTL_SECONDS = 60;
+
 export async function listPartners(): Promise<DeliveryPartnerDTO[]> {
-  const partners = await prisma.user.findMany({
-    where: { isActive: true, role: { key: ROLES.DELIVERY_PARTNER } },
-    select: { id: true, name: true, email: true, phone: true },
-    orderBy: { name: 'asc' },
+  return cached(PARTNERS_CACHE_KEY, PARTNERS_CACHE_TTL_SECONDS, async () => {
+    const partners = await prisma.user.findMany({
+      where: { isActive: true, role: { key: ROLES.DELIVERY_PARTNER } },
+      select: { id: true, name: true, email: true, phone: true },
+      orderBy: { name: 'asc' },
+    });
+    const open = await prisma.deliveryAssignment.groupBy({
+      by: ['deliveryPartnerId'],
+      where: { status: { in: [...OPEN_STATUSES] }, order: { status: { notIn: TERMINAL_STATUSES } } },
+      _count: { _all: true },
+    });
+    const counts = new Map(open.map((o) => [o.deliveryPartnerId, o._count._all]));
+    return partners.map((p) => ({ ...p, activeAssignments: counts.get(p.id) ?? 0 }));
   });
-  const open = await prisma.deliveryAssignment.groupBy({
-    by: ['deliveryPartnerId'],
-    where: { status: { in: [...OPEN_STATUSES] }, order: { status: { notIn: TERMINAL_STATUSES } } },
-    _count: { _all: true },
-  });
-  const counts = new Map(open.map((o) => [o.deliveryPartnerId, o._count._all]));
-  return partners.map((p) => ({ ...p, activeAssignments: counts.get(p.id) ?? 0 }));
 }
 
 export async function offerToPartner(actorUserId: string, input: AssignDeliveryInput): Promise<OrderDTO> {

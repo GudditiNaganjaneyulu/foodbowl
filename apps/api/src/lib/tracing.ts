@@ -9,8 +9,11 @@
  * OTEL_EXPORTER_OTLP_ENDPOINT at the local Jaeger/otel-collector for dev, or
  * at any OTLP-compatible backend later — nothing here changes.
  */
+import { metrics } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { RuntimeNodeInstrumentation } from '@opentelemetry/instrumentation-runtime-node';
+import { HostMetrics } from '@opentelemetry/host-metrics';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
@@ -35,10 +38,21 @@ const sdk = new NodeSDK({
       // Filesystem instrumentation is extremely noisy for a web API; skip it.
       '@opentelemetry/instrumentation-fs': { enabled: false },
     }),
+    // V8/Node runtime metrics (event loop delay & utilization, GC duration,
+    // heap space usage) — auto-instrumentations-node only covers request-level
+    // spans, not the runtime itself.
+    new RuntimeNodeInstrumentation({ monitoringPrecision: 5000 }),
   ],
 });
 
 sdk.start();
+
+// process.cpu.time, process.memory.usage, system.network.io/errors — the
+// remaining "No data" panels on Grafana's Node.js Application Observability
+// dashboard (CPU Time, Memory (Physical), Network IO/Errors) that
+// RuntimeNodeInstrumentation above doesn't cover. Must be started after
+// sdk.start(), which is what registers the global MeterProvider this reads.
+new HostMetrics({ meterProvider: metrics.getMeterProvider(), name: serviceName }).start();
 
 process.on('SIGTERM', () => {
   sdk.shutdown().finally(() => process.exit(0));
